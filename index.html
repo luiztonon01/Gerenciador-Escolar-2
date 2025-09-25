@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gerenciamento Escolar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variáveis globais para Firebase
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth, userId;
+        let subjectsData = [];
+        let classesData = [];
+
+        const mainContainer = document.getElementById('main-container');
+
+        // Dados de exemplo
+        const studentData = [
+            { nome: 'Ana Silva', turmaId: 'turma-manha-1', idade: 16, responsaveis: 'Maria e José Silva', contato: '11987654321', endereco: 'Rua das Flores, 10', turma: 'Turma A', historico: 'Ótimo', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Ana', documentosPdf: null, historicoPdf: null },
+            { nome: 'João Santos', turmaId: 'turma-manha-1', idade: 15, responsaveis: 'Carla e Pedro Santos', contato: '11987654322', endereco: 'Av. Paulista, 100', turma: 'Turma A', historico: 'Bom', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Joao', documentosPdf: null, historicoPdf: null },
+            { nome: 'Sofia Souza', turmaId: 'turma-tarde-1', idade: 14, responsaveis: 'Fernanda Souza', contato: '11987654323', endereco: 'Rua do Limoeiro, 5', turma: 'Turma C', historico: 'Regular', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Sofia', documentosPdf: null, historicoPdf: null },
+            { nome: 'Marcos Oliveira', turmaId: 'turma-noite-1', idade: 17, responsaveis: 'Lucia e Carlos Oliveira', contato: '11987654324', endereco: 'Rua da Amizade, 25', turma: 'Turma E', historico: 'Excelente', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Marcos', documentosPdf: null, historicoPdf: null },
+            { nome: 'Isabela Costa', turmaId: 'turma-noite-1', idade: 18, responsaveis: 'Julia Costa', contato: '11987654325', endereco: 'Travessa da Saudade, 7', turma: 'Turma E', historico: 'Bom', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Isabela', documentosPdf: null, historicoPdf: null }
+        ];
+
+        const gradesData = [
+            { studentId: '', materia: 'Matemática', bimestre1: 18, bimestre2: 12, bimestre3: 17, bimestre4: 19 },
+            { studentId: '', materia: 'Português', bimestre1: 15, bimestre2: 16, bimestre3: 14, bimestre4: 18 },
+            { studentId: '', materia: 'História', bimestre1: 10, bimestre2: 11, bimestre3: 9, bimestre4: 12 }
+        ];
+
+        const initialSubjectsData = [
+            { nome: 'Português' },
+            { nome: 'Matemática' },
+            { nome: 'História' },
+            { nome: 'Ciências' },
+            { nome: 'Geografia' },
+        ];
+
+
+        async function initFirebase() {
+            try {
+                if (Object.keys(firebaseConfig).length > 0) {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                    console.log("Firebase inicializado.");
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        console.log("Logado com token personalizado.");
+                    } else {
+                        await signInAnonymously(auth);
+                        console.log("Logado anonimamente.");
+                    }
+                    userId = auth.currentUser?.uid || `anon-${crypto.randomUUID()}`;
+                    console.log("ID do usuário:", userId);
+                    await setupDummyData();
+                    onSnapshot(collection(db, `artifacts/${appId}/public/data/classes`), window.renderDashboard);
+                } else {
+                    console.error("Configuração do Firebase ausente.");
+                    mainContainer.innerHTML = `<div class="p-8 text-center text-red-500">Erro: Configuração do Firebase faltando. Por favor, verifique suas credenciais.</div>`;
+                }
+            } catch (e) {
+                console.error("Erro durante a inicialização ou login do Firebase:", e);
+                mainContainer.innerHTML = `<div class="p-8 text-center text-red-500">Erro ao iniciar o Firebase: ${e.message}</div>`;
+            }
+        }
+
+        async function setupDummyData() {
+            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
+            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
+            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
+
+            const classSnap = await getDocs(classesCol);
+            if (classSnap.empty) {
+                console.log("Adicionando dados iniciais.");
+                const classes = [
+                    { id: 'turma-manha-1', nome: 'Turma A', turno: 'Manhã' },
+                    { id: 'turma-manha-2', nome: 'Turma B', turno: 'Manhã' },
+                    { id: 'turma-tarde-1', nome: 'Turma C', turno: 'Tarde' },
+                    { id: 'turma-tarde-2', nome: 'Turma D', turno: 'Tarde' },
+                    { id: 'turma-noite-1', nome: 'Turma E', turno: 'Noite' },
+                    { id: 'turma-noite-2', nome: 'Turma F', turno: 'Noite' },
+                ];
+                for (const cls of classes) {
+                    await setDoc(doc(classesCol, cls.id), cls);
+                }
+
+                for (const student of studentData) {
+                    const studentRef = await addDoc(studentsCol, student);
+                    const newGrades = gradesData.map(g => ({ ...g, studentId: studentRef.id }));
+                    await updateDoc(studentRef, { grades: newGrades });
+                }
+
+                for (const subject of initialSubjectsData) {
+                    await addDoc(subjectsCol, subject);
+                }
+            }
+        }
+
+        async function fetchStudentCount() {
+            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
+            const snapshot = await getDocs(studentsCol);
+            return snapshot.size;
+        }
+
+        function calculateFinalStatus(grades) {
+            const totalScore = grades.reduce((sum, g) => {
+                const bimestreScore = (g.bimestre1 || 0) + (g.bimestre2 || 0) + (g.bimestre3 || 0) + (g.bimestre4 || 0);
+                return sum + bimestreScore;
+            }, 0);
+            return totalScore >= 60 ? 'Aprovado' : 'Reprovado';
+        }
+
+        window.renderDashboard = async function() {
+            const studentCount = await fetchStudentCount();
+            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
+            const classesSnapshot = await getDocs(classesCol);
+            const classes = classesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            classesData = classes; // Armazena os dados das turmas globalmente
+
+            const classesByShift = {
+                Manhã: classes.filter(cls => cls.turno === 'Manhã'),
+                Tarde: classes.filter(cls => cls.turno === 'Tarde'),
+                Noite: classes.filter(cls => cls.turno === 'Noite'),
+            };
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <h1 class="text-4xl font-bold text-gray-800 mb-6 text-center">Dashboard Escolar</h1>
+                    <div class="bg-indigo-600 rounded-xl p-6 mb-8 text-white shadow-lg text-center">
+                        <h2 class="text-2xl font-semibold">Total de Alunos Cadastrados</h2>
+                        <p class="text-5xl font-extrabold mt-2">${studentCount}</p>
+                    </div>
+
+                    <div class="flex justify-center gap-4 mb-8">
+                        <button onclick="window.renderDashboard()" class="bg-indigo-500 text-white py-2 px-6 rounded-lg font-semibold shadow-md hover:bg-indigo-600 transition-colors duration-300">
+                            Dashboard
+                        </button>
+                        <button onclick="window.renderManagementDashboard()" class="bg-gray-500 text-white py-2 px-6 rounded-lg font-semibold shadow-md hover:bg-gray-600 transition-colors duration-300">
+                            Gerenciar Dados
+                        </button>
+                    </div>
+
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                        ${Object.keys(classesByShift).map(shift => `
+                            <div class="mb-8">
+                                <h3 class="text-2xl font-bold text-gray-700 mb-4">${shift}</h3>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                    ${classesByShift[shift].map(cls => `
+                                        <button onclick="window.showStudents('${cls.id}', '${cls.nome}')" class="bg-white p-4 rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 text-center">
+                                            <p class="font-bold text-lg text-indigo-700">${cls.nome}</p>
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        window.showStudents = async function (classId, className) {
+            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
+            const q = query(studentsCol, where("turmaId", "==", classId));
+            const studentsSnapshot = await getDocs(q);
+            const students = studentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <button onclick="window.renderDashboard()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Voltar para o Dashboard
+                    </button>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Alunos da ${className}</h1>
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                        ${students.length > 0 ? students.map(student => `
+                            <button onclick="window.showStudentProfile('${student.id}')" class="flex items-center w-full p-4 mb-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
+                                <img src="${student.foto || 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Foto'}" alt="${student.nome}" class="w-12 h-12 rounded-full mr-4 object-cover">
+                                <span class="font-semibold text-lg text-gray-700">${student.nome}</span>
+                            </button>
+                        `).join('') : '<p class="text-center text-gray-500">Nenhum aluno cadastrado nesta turma.</p>'}
+                    </div>
+                </div>
+            `;
+        };
+
+        window.showStudentProfile = async function (studentId) {
+            const studentDocRef = doc(db, `artifacts/${appId}/public/data/students`, studentId);
+            const studentSnap = await getDoc(studentDocRef);
+            const student = studentSnap.data();
+
+            const grades = student.grades || [];
+
+            // Fetch daily attendance records for the student
+            const attendanceCol = collection(db, `artifacts/${appId}/public/data/diario_aulas`);
+            const qAttendance = query(attendanceCol, where("turmaId", "==", student.turmaId));
+            const attendanceSnap = await getDocs(qAttendance);
+            const attendanceRecords = attendanceSnap.docs
+                .map(doc => doc.data())
+                .filter(rec => rec.presencas.some(p => p.studentId === studentId))
+                .sort((a, b) => new Date(b.data) - new Date(a.data));
+
+            // Fetch activity grades for the student
+            const activitiesCol = collection(db, `artifacts/${appId}/public/data/atividades`);
+            const qActivities = query(activitiesCol, where("turmaId", "==", student.turmaId));
+            const activitiesSnap = await getDocs(qActivities);
+            const activityGrades = activitiesSnap.docs
+                .map(doc => ({ ...doc.data(), id: doc.id }))
+                .filter(act => act.notas.some(n => n.studentId === studentId));
+
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <button onclick="window.showStudents('${student.turmaId}', '${student.turma || ''}')" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Voltar para a Turma
+                    </button>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">${student.nome}</h1>
+
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg mb-8">
+                        <div class="flex items-center mb-6">
+                            <img src="${student.foto || 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Foto'}" alt="${student.nome}" class="w-24 h-24 rounded-full mr-6 object-cover shadow-md">
+                            <div>
+                                <h2 class="text-2xl font-bold text-indigo-700">${student.nome}</h2>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <h3 class="text-xl font-semibold text-gray-700 mb-3">Informações Pessoais</h3>
+                                <div class="space-y-2 text-gray-600">
+                                    <p><span class="font-bold">Idade:</span> ${student.idade} anos</p>
+                                    <p><span class="font-bold">Turma:</span> ${student.turma}</p>
+                                    <p><span class="font-bold">Responsáveis:</span> ${student.responsaveis}</p>
+                                    <p><span class="font-bold">Contato:</span> ${student.contato}</p>
+                                    <p><span class="font-bold">Endereço:</span> ${student.endereco}</p>
+                                    <p><span class="font-bold">Documentos:</span>
+                                        ${student.documentosPdf ? `<a href="data:application/pdf;base64,${btoa(String.fromCharCode(...new Uint8Array(student.documentosPdf.data)))}" download="${student.nome}_documentos.pdf" class="text-blue-500 hover:underline">Baixar PDF</a>` : `Nenhum documento adicionado.`}
+                                    </p>
+                                    <p><span class="font-bold">Histórico Escolar:</span>
+                                        ${student.historicoPdf ? `<a href="data:application/pdf;base64,${btoa(String.fromCharCode(...new Uint8Array(student.historicoPdf.data)))}" download="${student.nome}_historico.pdf" class="text-blue-500 hover:underline">Baixar PDF</a>` : `Nenhum histórico adicionado.`}
+                                    </p>
+                                </div>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-semibold text-gray-700 mb-3">Notas e Matérias</h3>
+                                ${grades.length > 0 ? `
+                                <div class="overflow-x-auto">
+                                <table class="min-w-full bg-white rounded-lg shadow-md">
+                                    <thead class="bg-gray-200">
+                                        <tr>
+                                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Matéria</th>
+                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Bimestre 1</th>
+                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Bimestre 2</th>
+                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Bimestre 3</th>
+                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Bimestre 4</th>
+                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Total</th>
+                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${grades.map(grade => {
+                                            const total = (grade.bimestre1 || 0) + (grade.bimestre2 || 0) + (grade.bimestre3 || 0) + (grade.bimestre4 || 0);
+                                            const status = total >= 60 ? 'Aprovado' : 'Reprovado';
+                                            return `
+                                            <tr class="border-b border-gray-200 last:border-0">
+                                                <td class="py-2 px-4 text-gray-700">${grade.materia}</td>
+                                                <td class="py-2 px-4 text-center font-bold ${grade.bimestre1 >= 15 ? 'text-blue-600' : 'text-red-600'}">${grade.bimestre1 || '-'}</td>
+                                                <td class="py-2 px-4 text-center font-bold ${grade.bimestre2 >= 15 ? 'text-blue-600' : 'text-red-600'}">${grade.bimestre2 || '-'}</td>
+                                                <td class="py-2 px-4 text-center font-bold ${grade.bimestre3 >= 15 ? 'text-blue-600' : 'text-red-600'}">${grade.bimestre3 || '-'}</td>
+                                                <td class="py-2 px-4 text-center font-bold ${grade.bimestre4 >= 15 ? 'text-blue-600' : 'text-red-600'}">${grade.bimestre4 || '-'}</td>
+                                                <td class="py-2 px-4 text-center font-bold text-gray-800">${total}</td>
+                                                <td class="py-2 px-4 text-center font-bold ${status === 'Aprovado' ? 'text-green-600' : 'text-red-600'}">${status}</td>
+                                            </tr>`;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                                </div>
+                                ` : '<p class="text-center text-gray-500 mt-4">Nenhuma nota cadastrada para este aluno.</p>'}
+                            </div>
+                        </div>
+
+                        <h3 class="text-xl font-semibold text-gray-700 mt-8 mb-4">Histórico de Aulas e Presenças</h3>
+                        ${attendanceRecords.length > 0 ? `
+                        <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white rounded-lg shadow-md">
+                            <thead class="bg-gray-200">
+                                <tr>
+                                    <th class="py-2 px-4 text-left font-semibold text-gray-600">Data</th>
+                                    <th class="py-2 px-4 text-left font-semibold text-gray-600">Assunto</th>
+                                    <th class="py-2 px-4 text-left font-semibold text-gray-600">Matéria</th>
+                                    <th class="py-2 px-4 text-left font-semibold text-gray-600">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${attendanceRecords.map(record => {
+                                    const attendance = record.presencas.find(p => p.studentId === studentId);
+                                    return `
+                                    <tr class="border-b border-gray-200 last:border-0">
+                                        <td class="py-2 px-4 text-gray-700">${record.data}</td>
+                                        <td class="py-2 px-4 text-gray-700">${record.assunto || 'N/A'}</td>
+                                        <td class="py-2 px-4 text-gray-700">${subjectsData.find(s => s.id === record.materiaId)?.nome || 'N/A'}</td>
+                                        <td class="py-2 px-4 font-bold ${attendance.status === 'presente' ? 'text-green-600' : 'text-red-600'}">${attendance.status === 'presente' ? 'Presente' : 'Ausente'}</td>
+                                    </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                        </div>
+                        ` : `<p class="text-center text-gray-500">Nenhum registro de presença para este aluno.</p>`}
+
+                        <h3 class="text-xl font-semibold text-gray-700 mt-8 mb-4">Notas de Atividades</h3>
+                        ${activityGrades.length > 0 ? `
+                        <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white rounded-lg shadow-md">
+                            <thead class="bg-gray-200">
+                                <tr>
+                                    <th class="py-2 px-4 text-left font-semibold text-gray-600">Atividade</th>
+                                    <th class="py-2 px-4 text-center font-semibold text-gray-600">Peso</th>
+                                    <th class="py-2 px-4 text-center font-semibold text-gray-600">Nota</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${activityGrades.map(activity => {
+                                    const grade = activity.notas.find(n => n.studentId === studentId);
+                                    return `
+                                    <tr class="border-b border-gray-200 last:border-0">
+                                        <td class="py-2 px-4 text-gray-700">${activity.nomeAtividade}</td>
+                                        <td class="py-2 px-4 text-center text-gray-700">${activity.peso}</td>
+                                        <td class="py-2 px-4 text-center font-bold ${grade.nota >= 70 ? 'text-green-600' : 'text-red-600'}">${grade.nota}</td>
+                                    </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                        </div>
+                        ` : `<p class="text-center text-gray-500">Nenhuma nota de atividade para este aluno.</p>`}
+                    </div>
+                </div>
+            `;
+        };
+
+        window.renderManagementDashboard = async function() {
+             const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
+             const classesSnap = await getDocs(classesCol);
+             const classes = classesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <button onclick="window.renderDashboard()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Voltar para o Dashboard
+                    </button>
+                    <h1 class="text-4xl font-bold text-gray-800 mb-6 text-center">Gerenciar Dados Escolares</h1>
+                    <div class="flex justify-center gap-4 mb-8">
+                        <button onclick="window.renderManagementDashboard()" class="bg-indigo-500 text-white py-2 px-6 rounded-lg font-semibold shadow-md hover:bg-indigo-600 transition-colors duration-300">
+                            Gerenciar Dados
+                        </button>
+                        <button onclick="window.renderDashboard()" class="bg-gray-500 text-white py-2 px-6 rounded-lg font-semibold shadow-md hover:bg-gray-600 transition-colors duration-300">
+                            Dashboard
+                        </button>
+                    </div>
+
+                    <!-- Botões de Gerenciamento -->
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                            <button onclick="window.renderClassManagement()" class="bg-blue-600 text-white p-4 rounded-xl shadow-md hover:bg-blue-700 transition-colors duration-300 text-center">Gerenciar Turmas</button>
+                            <button onclick="window.renderStudentManagement()" class="bg-blue-600 text-white p-4 rounded-xl shadow-md hover:bg-blue-700 transition-colors duration-300 text-center">Gerenciar Alunos</button>
+                            <button onclick="window.renderSubjectManagement()" class="bg-blue-600 text-white p-4 rounded-xl shadow-md hover:bg-blue-700 transition-colors duration-300 text-center">Gerenciar Matérias</button>
+                            <button onclick="window.renderSchoolDiaryManagement()" class="bg-blue-600 text-white p-4 rounded-xl shadow-md hover:bg-blue-700 transition-colors duration-300 text-center">Gerenciar Diário Escolar</button>
+                            <button onclick="window.renderGradeManagement()" class="bg-green-600 text-white p-4 rounded-xl shadow-md hover:bg-green-700 transition-colors duration-300 text-center">Gerenciar Notas</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Gerenciamento de Turmas ---
+        window.renderClassManagement = async function() {
+            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
+            const classesSnap = await getDocs(classesCol);
+            const classes = classesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <button onclick="window.renderManagementDashboard()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Voltar
+                    </button>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Turmas</h1>
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                        <h2 class="text-2xl font-semibold mb-4">Adicionar Nova Turma</h2>
+                        <form id="addClassForm" class="mb-6 space-y-4">
+                            <input type="text" id="className" placeholder="Nome da Turma" class="w-full p-2 border border-gray-300 rounded-md">
+                            <select type="text" id="classShift" class="w-full p-2 border border-gray-300 rounded-md">
+                                <option value="Manhã">Manhã</option>
+                                <option value="Tarde">Tarde</option>
+                                <option value="Noite">Noite</option>
+                            </select>
+                            <button type="submit" class="bg-green-500 text-white p-2 rounded-md hover:bg-green-600">Adicionar Turma</button>
+                        </form>
+                        <h2 class="text-2xl font-semibold mb-4">Lista de Turmas</h2>
+                        <ul class="space-y-2" id="classList">
+                            ${classes.map(cls => `
+                                <li class="bg-white p-4 rounded-lg shadow-sm flex justify-between items-center">
+                                    <span>${cls.nome} - ${cls.turno}</span>
+                                    <div class="space-x-2">
+                                        <button onclick="window.deleteClass('${cls.id}')" class="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">Excluir</button>
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+            document.getElementById('addClassForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const name = document.getElementById('className').value;
+                const shift = document.getElementById('classShift').value;
+                if (name) {
+                    await addDoc(classesCol, { nome: name, turno: shift });
+                    window.renderClassManagement();
+                }
+            });
+        }
+
+        window.deleteClass = async function(classId) {
+            console.log("Excluindo turma com ID:", classId);
+            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
+            await deleteDoc(doc(classesCol, classId));
+            // Delete students associated with the class
+            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
+            const q = query(studentsCol, where("turmaId", "==", classId));
+            const studentsSnap = await getDocs(q);
+            const deletePromises = studentsSnap.docs.map(d => deleteDoc(doc(studentsCol, d.id)));
+            await Promise.all(deletePromises);
+            window.renderClassManagement();
+        }
+
+        // --- Gerenciamento de Alunos ---
+        window.renderStudentManagement = async function() {
+            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
+            const studentsSnap = await getDocs(studentsCol);
+            const students = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <button onclick="window.renderManagementDashboard()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Voltar
+                    </button>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Alunos</h1>
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                        <h2 class="text-2xl font-semibold mb-4">Adicionar Novo Aluno</h2>
+                        ${window.renderStudentForm()}
+                        <h2 class="text-2xl font-semibold mb-4">Lista de Alunos</h2>
+                        <ul class="space-y-2" id="studentList">
+                            ${students.map(student => `
+                                <li class="bg-white p-4 rounded-lg shadow-sm flex justify-between items-center">
+                                    <span>${student.nome}</span>
+                                    <div class="space-x-2">
+                                        <button onclick="window.renderEditStudentForm('${student.id}')" class="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">Editar</button>
+                                        <button onclick="window.deleteStudent('${student.id}')" class="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">Excluir</button>
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+            document.getElementById('addStudentForm').addEventListener('submit', handleStudentFormSubmit);
+        }
+
+        window.renderStudentForm = function(student = {}) {
+            const isEditing = student.id;
+            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
+            onSnapshot(classesCol, (snapshot) => {
+                classesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const classSelect = document.getElementById('studentClass');
+                if (classSelect) {
+                    classSelect.innerHTML = `<option value="">Selecione a Turma</option>` + classesData.map(cls => `<option value="${cls.id}" ${student.turmaId === cls.id ? 'selected' : ''}>${cls.nome} (${cls.turno})</option>`).join('');
+                }
+            });
+
+            return `
+                <form id="${isEditing ? 'editStudentForm' : 'addStudentForm'}" class="mb-6 space-y-4">
+                    <input type="hidden" id="studentId" value="${student.id || ''}">
+                    ${isEditing ? `<img id="previewPhoto" src="${student.foto || 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Foto'}" class="w-24 h-24 rounded-full mx-auto object-cover mb-4">` : ''}
+                    <input type="text" id="studentName" placeholder="Nome Completo" value="${student.nome || ''}" class="w-full p-2 border border-gray-300 rounded-md">
+                    <input type="number" id="studentAge" placeholder="Idade" value="${student.idade || ''}" class="w-full p-2 border border-gray-300 rounded-md">
+                    <select id="studentClass" class="w-full p-2 border border-gray-300 rounded-md">
+                        <option value="">Selecione a Turma</option>
+                    </select>
+                    <input type="text" id="studentResponsible" placeholder="Nome dos Responsáveis" value="${student.responsaveis || ''}" class="w-full p-2 border border-gray-300 rounded-md">
+                    <input type="text" id="studentContact" placeholder="Contato" value="${student.contato || ''}" class="w-full p-2 border border-gray-300 rounded-md">
+                    <input type="text" id="studentAddress" placeholder="Endereço" value="${student.endereco || ''}" class="w-full p-2 border border-gray-300 rounded-md">
+
+                    <label class="block text-gray-700 font-medium">Foto de Perfil</label>
+                    <input type="file" id="studentPhoto" accept="image/png, image/jpeg" class="w-full p-2 border border-gray-300 rounded-md">
+
+                    <label class="block text-gray-700 font-medium">Documentos (PDF)</label>
+                    <input type="file" id="studentDocumentsPdf" accept="application/pdf" class="w-full p-2 border border-gray-300 rounded-md">
+                    ${student.documentosPdf ? `<a href="data:application/pdf;base64,${btoa(String.fromCharCode(...new Uint8Array(student.documentosPdf.data)))}" download="${student.nome}_documentos.pdf" class="text-blue-500 hover:underline mt-2">Ver PDF atual</a>` : ''}
+
+                    <label class="block text-gray-700 font-medium">Histórico Escolar (PDF)</label>
+                    <input type="file" id="studentHistoryPdf" accept="application/pdf" class="w-full p-2 border border-gray-300 rounded-md">
+                    ${student.historicoPdf ? `<a href="data:application/pdf;base64,${btoa(String.fromCharCode(...new Uint8Array(student.historicoPdf.data)))}" download="${student.nome}_historico.pdf" class="text-blue-500 hover:underline mt-2">Baixar PDF</a>` : ''}
+
+                    <button type="submit" class="bg-green-500 text-white p-2 rounded-md hover:bg-green-600">${isEditing ? 'Salvar Alterações' : 'Adicionar Aluno'}</button>
+                    <div id="statusMessage" class="mt-4 text-center"></div>
+                </form>
+            `;
+        }
+
+        async function handleStudentFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const statusMessage = document.getElementById('statusMessage');
+            statusMessage.textContent = 'Salvando...';
+
+            let studentId = form.querySelector('#studentId').value;
+            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
+            let studentRef;
+
+            if (!studentId) {
+                studentRef = doc(studentsCol);
+                studentId = studentRef.id;
+            } else {
+                studentRef = doc(studentsCol, studentId);
+            }
+
+            const photoFile = form.querySelector('#studentPhoto').files[0];
+            const docsFile = form.querySelector('#studentDocumentsPdf').files[0];
+            const histFile = form.querySelector('#studentHistoryPdf').files[0];
+
+            let studentData = {
+                nome: form.querySelector('#studentName').value,
+                idade: parseInt(form.querySelector('#studentAge').value),
+                turmaId: form.querySelector('#studentClass').value,
+                turma: classesData.find(c => c.id === form.querySelector('#studentClass').value)?.nome || '',
+                responsaveis: form.querySelector('#studentResponsible').value,
+                contato: form.querySelector('#studentContact').value,
+                endereco: form.querySelector('#studentAddress').value,
+            };
+
+            const readFile = (file) => {
+                if (!file) return Promise.resolve(null);
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsArrayBuffer(file);
+                });
+            };
+
+            studentData.foto = form.querySelector('#previewPhoto')?.src || 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Foto';
+            if (docsFile) studentData.documentosPdf = Array.from(new Uint8Array(await readFile(docsFile)));
+            if (histFile) studentData.historicoPdf = Array.from(new Uint8Array(await readFile(histFile)));
+
+            if (photoFile) {
+                studentData.foto = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(photoFile);
+                });
+            }
+
+            if (form.querySelector('#studentId').value) {
+                await updateDoc(studentRef, studentData);
+            } else {
+                await setDoc(studentRef, { ...studentData, grades: [] });
+            }
+
+            statusMessage.textContent = 'Salvo com sucesso!';
+            setTimeout(() => {
+                window.renderStudentManagement();
+            }, 1000);
+        }
+
+        window.renderEditStudentForm = async function(studentId) {
+            const studentDoc = doc(db, `artifacts/${appId}/public/data/students`, studentId);
+            const studentSnap = await getDoc(studentDoc);
+            const student = { id: studentSnap.id, ...studentSnap.data() };
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <button onclick="window.renderStudentManagement()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                        <svg xmlns="http://www.w3.org/20-svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Voltar
+                    </button>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Editar Aluno</h1>
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                        ${window.renderStudentForm(student)}
+                    </div>
+                </div>
+            `;
+            document.getElementById('editStudentForm').addEventListener('submit', handleStudentFormSubmit);
+
+            // Adicionar ouvinte de evento para atualizar a pré-visualização da imagem
+            document.getElementById('studentPhoto').addEventListener('change', function(event) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('previewPhoto').src = e.target.result;
+                };
+                reader.readAsDataURL(event.target.files[0]);
+            });
+        }
+
+        window.deleteStudent = async function(studentId) {
+            console.log("Excluindo aluno com ID:", studentId);
+            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
+            await deleteDoc(doc(studentsCol, studentId));
+            window.renderStudentManagement();
+        }
+
+        // --- Gerenciamento de Matérias ---
+        window.renderSubjectManagement = async function() {
+            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
+
+            onSnapshot(subjectsCol, (snapshot) => {
+                const subjects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                subjectsData = subjects;
+
+                mainContainer.innerHTML = `
+                    <div class="p-6">
+                        <button onclick="window.renderManagementDashboard()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                              <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                            </svg>
+                            Voltar
+                        </button>
+                        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Matérias</h1>
+                        <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                            <h2 class="text-2xl font-semibold mb-4">Adicionar Nova Matéria</h2>
+                            <form id="addSubjectForm" class="mb-6 flex gap-2">
+                                <input type="text" id="subjectName" placeholder="Nome da Matéria" class="flex-grow p-2 border border-gray-300 rounded-md">
+                                <button type="submit" class="bg-green-500 text-white p-2 rounded-md hover:bg-green-600">Adicionar</button>
+                            </form>
+                            <h2 class="text-2xl font-semibold mb-4">Lista de Matérias</h2>
+                            <ul class="space-y-2" id="subjectList">
+                                ${subjects.map(subject => `
+                                    <li class="bg-white p-4 rounded-lg shadow-sm flex justify-between items-center">
+                                        <span>${subject.nome}</span>
+                                        <button onclick="window.deleteSubject('${subject.id}')" class="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">Excluir</button>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('addSubjectForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const name = document.getElementById('subjectName').value;
+                    if (name) {
+                        await addDoc(subjectsCol, { nome: name });
+                        document.getElementById('subjectName').value = '';
+                    }
+                });
+            });
+        }
+
+        window.deleteSubject = async function(subjectId) {
+            console.log("Excluindo matéria com ID:", subjectId);
+            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
+            await deleteDoc(doc(subjectsCol, subjectId));
+        }
+
+        // --- Gerenciamento de Notas ---
+        window.renderGradeManagement = async function() {
+            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
+            const studentsSnap = await getDocs(studentsCol);
+            const students = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <button onclick="window.renderManagementDashboard()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Voltar
+                    </button>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Notas dos Alunos</h1>
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                        <h2 class="text-2xl font-semibold mb-4">Selecione um Aluno</h2>
+                        <ul class="space-y-2" id="studentList">
+                            ${students.map(student => `
+                                <li class="bg-white p-4 rounded-lg shadow-sm flex justify-between items-center">
+                                    <span>${student.nome}</span>
+                                    <button onclick="window.renderEditGradesForm('${student.id}')" class="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">Gerenciar Notas</button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+        };
+
+        window.renderEditGradesForm = async function(studentId) {
+            const studentDoc = doc(db, `artifacts/${appId}/public/data/students`, studentId);
+            const studentSnap = await getDoc(studentDoc);
+            const student = { id: studentSnap.id, ...studentSnap.data() };
+            const grades = student.grades || [];
+
+            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
+            const subjectsSnap = await getDocs(subjectsCol);
+            subjectsData = subjectsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const gradeInputs = subjectsData.map(subject => {
+                const studentGrade = grades.find(g => g.materia === subject.nome) || {
+                    materia: subject.nome,
+                    bimestre1: '',
+                    bimestre2: '',
+                    bimestre3: '',
+                    bimestre4: ''
+                };
+                return `
+                    <div class="p-4 border border-gray-200 rounded-lg">
+                        <h4 class="font-bold mb-2 text-indigo-700">${subject.nome}</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-gray-600 text-sm">Bimestre 1</label>
+                                <input type="number" name="bimestre1" data-materia="${subject.nome}" value="${studentGrade.bimestre1}" class="w-full p-2 border border-gray-300 rounded-md">
+                            </div>
+                            <div>
+                                <label class="block text-gray-600 text-sm">Bimestre 2</label>
+                                <input type="number" name="bimestre2" data-materia="${subject.nome}" value="${studentGrade.bimestre2}" class="w-full p-2 border border-gray-300 rounded-md">
+                            </div>
+                            <div>
+                                <label class="block text-gray-600 text-sm">Bimestre 3</label>
+                                <input type="number" name="bimestre3" data-materia="${subject.nome}" value="${studentGrade.bimestre3}" class="w-full p-2 border border-gray-300 rounded-md">
+                            </div>
+                            <div>
+                                <label class="block text-gray-600 text-sm">Bimestre 4</label>
+                                <input type="number" name="bimestre4" data-materia="${subject.nome}" value="${studentGrade.bimestre4}" class="w-full p-2 border border-gray-300 rounded-md">
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <button onclick="window.renderGradeManagement()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Voltar
+                    </button>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Notas de ${student.nome}</h1>
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                        <form id="editGradesForm" data-student-id="${studentId}" class="space-y-6">
+                            ${gradeInputs}
+                            <button type="submit" class="bg-green-500 text-white p-3 rounded-md w-full hover:bg-green-600 font-semibold">Salvar Notas</button>
+                            <div id="gradesStatus" class="mt-4 text-center"></div>
+                        </form>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('editGradesForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const form = e.target;
+                const gradesStatus = document.getElementById('gradesStatus');
+                gradesStatus.textContent = 'Salvando...';
+
+                const newGrades = subjectsData.map(subject => {
+                    const gradeData = {
+                        materia: subject.nome,
+                        studentId: studentId,
+                        bimestre1: parseInt(form.querySelector(`input[data-materia="${subject.nome}"][name="bimestre1"]`).value) || 0,
+                        bimestre2: parseInt(form.querySelector(`input[data-materia="${subject.nome}"][name="bimestre2"]`).value) || 0,
+                        bimestre3: parseInt(form.querySelector(`input[data-materia="${subject.nome}"][name="bimestre3"]`).value) || 0,
+                        bimestre4: parseInt(form.querySelector(`input[data-materia="${subject.nome}"][name="bimestre4"]`).value) || 0,
+                    };
+                    return gradeData;
+                });
+
+                try {
+                    await updateDoc(doc(db, `artifacts/${appId}/public/data/students`, studentId), { grades: newGrades });
+                    gradesStatus.textContent = 'Notas salvas com sucesso!';
+                    gradesStatus.className = "text-green-600 mt-2";
+                    setTimeout(() => window.renderGradeManagement(), 1000);
+                } catch (error) {
+                    gradesStatus.textContent = 'Erro ao salvar notas: ' + error.message;
+                    gradesStatus.className = "text-red-600 mt-2";
+                    console.error("Erro ao salvar notas:", error);
+                }
+            });
+        };
+
+        // --- Gerenciamento de Diário Escolar ---
+        window.renderSchoolDiaryManagement = async function() {
+            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
+            const classesSnap = await getDocs(classesCol);
+            const classes = classesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <button onclick="window.renderManagementDashboard()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Voltar
+                    </button>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Diário Escolar</h1>
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                        <h2 class="text-2xl font-semibold mb-4">Selecionar Turma</h2>
+                        <select id="selectClass" class="w-full p-2 border border-gray-300 rounded-md mb-4">
+                            <option value="">Selecione uma turma...</option>
+                            ${classes.map(cls => `<option value="${cls.id}">${cls.nome} (${cls.turno})</option>`).join('')}
+                        </select>
+                        <div class="flex justify-center gap-4 mb-4" id="diaryButtons" style="display:none;">
+                            <button onclick="window.renderClassDiary(document.getElementById('selectClass').value)" class="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">Lançar Aulas e Notas</button>
+                            <button onclick="window.renderAttendanceReport(document.getElementById('selectClass').value)" class="bg-purple-500 text-white p-2 rounded-md hover:bg-purple-600">Relatório de Presenças</button>
+                        </div>
+                        <div id="schoolDiaryContent" class="hidden">
+                            <!-- Conteúdo do diário será carregado aqui -->
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('selectClass').addEventListener('change', (e) => {
+                const classId = e.target.value;
+                const diaryButtons = document.getElementById('diaryButtons');
+                if (classId) {
+                    diaryButtons.style.display = 'flex';
+                    window.renderClassDiary(classId);
+                } else {
+                    diaryButtons.style.display = 'none';
+                    document.getElementById('schoolDiaryContent').classList.add('hidden');
+                }
+            });
+        }
+
+        window.renderClassDiary = async function(classId) {
+            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
+            const qStudents = query(studentsCol, where("turmaId", "==", classId));
+            const studentsSnap = await getDocs(qStudents);
+            const students = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
+            const subjectsSnap = await getDocs(subjectsCol);
+            const subjects = subjectsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            subjectsData = subjects;
+
+            const schoolDiaryContent = document.getElementById('schoolDiaryContent');
+            schoolDiaryContent.classList.remove('hidden');
+            schoolDiaryContent.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white p-4 rounded-xl shadow-md">
+                        <h3 class="text-xl font-semibold mb-3">Lançar Aulas e Presenças</h3>
+                        <form id="dailyEntryForm" class="space-y-4">
+                            <input type="date" id="dailyDate" required class="w-full p-2 border border-gray-300 rounded-md">
+                            <select id="dailySubjectId" required class="w-full p-2 border border-gray-300 rounded-md">
+                                <option value="">Selecione a Matéria...</option>
+                                ${subjects.map(subject => `<option value="${subject.id}">${subject.nome}</option>`).join('')}
+                            </select>
+                            <input type="text" id="dailySubjectTopic" placeholder="Assunto da aula (opcional)" class="w-full p-2 border border-gray-300 rounded-md">
+                            <div id="attendanceList" class="space-y-2">
+                                <h4 class="font-medium text-gray-700">Presença:</h4>
+                                ${students.map(student => `
+                                    <label class="flex items-center space-x-2">
+                                        <input type="checkbox" name="attendance" value="${student.id}" class="rounded text-indigo-600" checked>
+                                        <span>${student.nome}</span>
+                                    </label>
+                                `).join('')}
+                            </div>
+                            <button type="submit" class="bg-green-500 text-white p-2 rounded-md hover:bg-green-600">Salvar Aulas e Presenças</button>
+                            <div id="dailyStatus" class="mt-2"></div>
+                        </form>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-xl shadow-md">
+                        <h3 class="text-xl font-semibold mb-3">Lançar Notas de Atividades</h3>
+                        <form id="activityForm" class="space-y-4">
+                            <input type="text" id="activityName" placeholder="Nome da Atividade (ex: Prova 1)" required class="w-full p-2 border border-gray-300 rounded-md">
+                            <input type="number" id="activityWeight" placeholder="Pontuação" required class="w-full p-2 border border-gray-300 rounded-md">
+                            
+                            <select id="activitySubject" required class="w-full p-2 border border-gray-300 rounded-md">
+                                <option value="">Selecione a Matéria...</option>
+                                ${subjects.map(subject => `<option value="${subject.nome}">${subject.nome}</option>`).join('')}
+                            </select>
+                            <select id="activityTrimester" required class="w-full p-2 border border-gray-300 rounded-md">
+                                <option value="">Selecione o Bimestre...</option>
+                                <option value="bimestre1">Bimestre 1</option>
+                                <option value="bimestre2">Bimestre 2</option>
+                                <option value="bimestre3">Bimestre 3</option>
+                                <option value="bimestre4">Bimestre 4</option>
+                            </select>
+                            
+                            <div id="gradesList" class="space-y-2">
+                                <h4 class="font-medium text-gray-700">Notas:</h4>
+                                ${students.map(student => `
+                                    <div class="flex items-center space-x-2">
+                                        <span class="w-24">${student.nome}:</span>
+                                        <input type="number" name="grade-${student.id}" placeholder="Nota" class="flex-grow p-1 border border-gray-300 rounded-md">
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <button type="submit" class="bg-green-500 text-white p-2 rounded-md hover:bg-green-600">Salvar Notas</button>
+                            <div id="gradesStatus" class="mt-2"></div>
+                        </form>
+                    </div>
+                </div>
+            `;
+
+            // Event listener for Daily Entry Form
+            document.getElementById('dailyEntryForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const dailyStatus = document.getElementById('dailyStatus');
+                const turmaId = document.getElementById('selectClass').value;
+                const dailyDate = document.getElementById('dailyDate').value;
+                const dailySubjectId = document.getElementById('dailySubjectId').value;
+                const dailySubjectTopic = document.getElementById('dailySubjectTopic').value;
+                const presentStudents = Array.from(e.target.elements.attendance)
+                    .filter(checkbox => checkbox.checked)
+                    .map(checkbox => checkbox.value);
+
+                const attendance = students.map(student => ({
+                    studentId: student.id,
+                    status: presentStudents.includes(student.id) ? 'presente' : 'ausente'
+                }));
+
+                try {
+                    await addDoc(collection(db, `artifacts/${appId}/public/data/diario_aulas`), {
+                        turmaId,
+                        data: dailyDate,
+                        assunto: dailySubjectTopic,
+                        materiaId: dailySubjectId,
+                        presencas: attendance
+                    });
+                    dailyStatus.textContent = "Presença e aula salvas com sucesso!";
+                    dailyStatus.className = "text-green-600 mt-2";
+                } catch (error) {
+                    dailyStatus.textContent = "Erro ao salvar: " + error.message;
+                    dailyStatus.className = "text-red-600 mt-2";
+                    console.error("Erro ao salvar diário:", error);
+                }
+            });
+
+            // Event listener for Activity Form
+            document.getElementById('activityForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const gradesStatus = document.getElementById('gradesStatus');
+                const turmaId = document.getElementById('selectClass').value;
+                const activityName = document.getElementById('activityName').value;
+                const activityWeight = parseInt(document.getElementById('activityWeight').value);
+                const activitySubject = document.getElementById('activitySubject').value;
+                const activityTrimester = document.getElementById('activityTrimester').value;
+
+                gradesStatus.textContent = 'Salvando...';
+
+                const activityData = {
+                    turmaId,
+                    nomeAtividade: activityName,
+                    peso: activityWeight,
+                    materia: activitySubject,
+                    bimestre: activityTrimester,
+                    notas: []
+                };
+
+                for (const student of students) {
+                    const gradeInput = document.getElementById(`grade-${student.id}`);
+                    const newGradeValue = parseInt(gradeInput?.value);
+                    if (isNaN(newGradeValue)) continue;
+
+                    activityData.notas.push({
+                        studentId: student.id,
+                        nota: newGradeValue
+                    });
+                }
+                
+                try {
+                    await addDoc(collection(db, `artifacts/${appId}/public/data/atividades`), activityData);
+                    gradesStatus.textContent = "Notas de atividade salvas com sucesso!";
+                    gradesStatus.className = "text-green-600 mt-2";
+                } catch (error) {
+                    gradesStatus.textContent = "Erro ao salvar: " + error.message;
+                    gradesStatus.className = "text-red-600 mt-2";
+                    console.error("Erro ao salvar notas:", error);
+                }
+            });
+        }
+
+        window.renderAttendanceReport = async function(classId) {
+            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
+            const qStudents = query(studentsCol, where("turmaId", "==", classId));
+            const studentsSnap = await getDocs(qStudents);
+            const students = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const attendanceCol = collection(db, `artifacts/${appId}/public/data/diario_aulas`);
+            const qAttendance = query(attendanceCol, where("turmaId", "==", classId));
+            const attendanceSnap = await getDocs(qAttendance);
+            const attendanceRecords = attendanceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
+            const subjectsSnap = await getDocs(subjectsCol);
+            const subjects = subjectsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            subjectsData = subjects;
+
+            const schoolDiaryContent = document.getElementById('schoolDiaryContent');
+            schoolDiaryContent.classList.remove('hidden');
+
+            const classInfo = classesData.find(cls => cls.id === classId);
+            const className = classInfo ? classInfo.nome : 'Turma Desconhecida';
+
+            // Calcular o total de faltas e presenças por aluno
+            const studentAttendanceSummary = students.map(student => {
+                const totalPresent = attendanceRecords.filter(rec => rec.presencas.find(p => p.studentId === student.id && p.status === 'presente')).length;
+                const totalAbsent = attendanceRecords.filter(rec => rec.presencas.find(p => p.studentId === student.id && p.status === 'ausente')).length;
+                return {
+                    ...student,
+                    totalPresent,
+                    totalAbsent
+                };
+            });
+
+            // Calcular resumo por matéria
+            const subjectSummary = {};
+            subjects.forEach(subject => {
+                subjectSummary[subject.id] = {
+                    nome: subject.nome,
+                    aulas: 0,
+                    alunosPresentes: {},
+                };
+                students.forEach(student => {
+                    subjectSummary[subject.id].alunosPresentes[student.id] = 0;
+                });
+            });
+
+            attendanceRecords.forEach(rec => {
+                const subjectId = rec.materiaId;
+                if (subjectSummary[subjectId]) {
+                    subjectSummary[subjectId].aulas++;
+                    rec.presencas.forEach(p => {
+                        if (p.status === 'presente' && subjectSummary[subjectId].alunosPresentes[p.studentId] !== undefined) {
+                            subjectSummary[subjectId].alunosPresentes[p.studentId]++;
+                        }
+                    });
+                }
+            });
+
+            const renderSubjectSummary = () => {
+                let html = '';
+                for (const subjectId in subjectSummary) {
+                    const summary = subjectSummary[subjectId];
+                    if (summary.aulas > 0) {
+                        html += `
+                            <div class="mb-6 p-4 bg-white rounded-lg shadow-sm">
+                                <h4 class="text-lg font-semibold mb-2">Resumo de Presenças: ${summary.nome} (${summary.aulas} aulas)</h4>
+                                <table class="min-w-full bg-gray-50 rounded-lg">
+                                    <thead class="bg-gray-200">
+                                        <tr>
+                                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Aluno</th>
+                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Total de Presenças</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${students.map(student => `
+                                            <tr class="border-b border-gray-200 last:border-0">
+                                                <td class="py-2 px-4">${student.nome}</td>
+                                                <td class="py-2 px-4 text-center">${summary.alunosPresentes[student.id] || 0} / ${summary.aulas}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    }
+                }
+                return html;
+            };
+
+            schoolDiaryContent.innerHTML = `
+                <h3 class="text-2xl font-bold text-gray-800 mb-4 text-center">Relatório de Presenças - ${className}</h3>
+                <div class="bg-white p-6 rounded-xl shadow-md mb-6">
+                    <h4 class="text-xl font-semibold mb-3">Resumo Geral de Presenças e Faltas</h4>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-gray-50 rounded-lg">
+                            <thead class="bg-gray-200">
+                                <tr>
+                                    <th class="py-2 px-4 text-left font-semibold text-gray-600">Aluno</th>
+                                    <th class="py-2 px-4 text-center font-semibold text-gray-600">Total de Presenças</th>
+                                    <th class="py-2 px-4 text-center font-semibold text-gray-600">Total de Faltas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${studentAttendanceSummary.map(student => `
+                                    <tr class="border-b border-gray-200 last:border-0">
+                                        <td class="py-2 px-4 text-gray-700">${student.nome}</td>
+                                        <td class="py-2 px-4 text-center font-bold text-green-600">${student.totalPresent}</td>
+                                        <td class="py-2 px-4 text-center font-bold text-red-600">${student.totalAbsent}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h4 class="text-xl font-semibold mb-3">Tabela Detalhada de Aulas</h4>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-gray-50 rounded-lg">
+                            <thead class="bg-gray-200">
+                                <tr>
+                                    <th class="py-2 px-4 text-left font-semibold text-gray-600">Data</th>
+                                    <th class="py-2 px-4 text-left font-semibold text-gray-600">Matéria</th>
+                                    <th class="py-2 px-4 text-left font-semibold text-gray-600">Assunto</th>
+                                    ${students.map(student => `
+                                        <th class="py-2 px-4 text-center font-semibold text-gray-600">${student.nome.split(' ')[0]}</th>
+                                    `).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${attendanceRecords.map(record => `
+                                    <tr class="border-b border-gray-200 last:border-0">
+                                        <td class="py-2 px-4">${record.data}</td>
+                                        <td class="py-2 px-4">${subjectsData.find(s => s.id === record.materiaId)?.nome || 'N/A'}</td>
+                                        <td class="py-2 px-4">${record.assunto || 'N/A'}</td>
+                                        ${students.map(student => {
+                                            const status = record.presencas.find(p => p.studentId === student.id)?.status;
+                                            const color = status === 'presente' ? 'bg-green-200' : 'bg-red-200';
+                                            const text = status === 'presente' ? 'P' : 'F';
+                                            return `<td class="py-2 px-4 text-center ${color} rounded-full m-1">${text}</td>`;
+                                        }).join('')}
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-gray-100 rounded-xl p-6 shadow-lg mt-6">
+                    ${renderSubjectSummary()}
+                </div>
+            `;
+        }
+
+        window.onload = () => {
+            initFirebase();
+        };
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans antialiased text-gray-800">
+    <div id="main-container" class="max-w-7xl mx-auto p-4 md:p-8">
+        <!-- O conteúdo será renderizado aqui pelo JavaScript -->
+        <div class="flex flex-col items-center justify-center h-screen">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500"></div>
+            <p class="mt-4 text-lg text-gray-600">Carregando...</p>
+        </div>
+    </div>
+</body>
+</html>
