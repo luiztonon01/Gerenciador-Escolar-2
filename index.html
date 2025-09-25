@@ -11,9 +11,26 @@
         import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Variáveis globais para Firebase
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // 🚨 CONFIGURAÇÃO DO FIREBASE ATUALIZADA 🚨
+        
+        // O App ID do seu projeto, usado também para o caminho no Firestore (artifacts/${appId}/public/...)
+        const appId = '1:698218834721:web:cc22b4e5a9d2c9bd31ac60';
+        
+        // O objeto principal de configuração do Firebase
+        const firebaseConfig = {
+          apiKey: "AIzaSyDVw-ybzObQDYfUnolDht19DjMlos1HPRw",
+          authDomain: "gerenciador-8f4e9.firebaseapp.com",
+          projectId: "gerenciador-8f4e9",
+          storageBucket: "gerenciador-8f4e9.firebasestorage.app",
+          messagingSenderId: "698218834721",
+          appId: appId, // Usa a variável 'appId' definida acima
+          measurementId: "G-5XR16448ED"
+        };
+        
+        // Use 'null' se não estiver usando o Firebase Custom Tokens
+        const initialAuthToken = null; 
+        
+        // Fim da área de configuração
 
         let app, db, auth, userId;
         let subjectsData = [];
@@ -375,7 +392,6 @@
                         </button>
                     </div>
 
-                    <!-- Botões de Gerenciamento -->
                     <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                             <button onclick="window.renderClassManagement()" class="bg-blue-600 text-white p-4 rounded-xl shadow-md hover:bg-blue-700 transition-colors duration-300 text-center">Gerenciar Turmas</button>
@@ -835,8 +851,7 @@
                             <button onclick="window.renderAttendanceReport(document.getElementById('selectClass').value)" class="bg-purple-500 text-white p-2 rounded-md hover:bg-purple-600">Relatório de Presenças</button>
                         </div>
                         <div id="schoolDiaryContent" class="hidden">
-                            <!-- Conteúdo do diário será carregado aqui -->
-                        </div>
+                            </div>
                     </div>
                 </div>
             `;
@@ -1165,7 +1180,6 @@
 </head>
 <body class="bg-gray-50 min-h-screen font-sans antialiased text-gray-800">
     <div id="main-container" class="max-w-7xl mx-auto p-4 md:p-8">
-        <!-- O conteúdo será renderizado aqui pelo JavaScript -->
         <div class="flex flex-col items-center justify-center h-screen">
             <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500"></div>
             <p class="mt-4 text-lg text-gray-600">Carregando...</p>
