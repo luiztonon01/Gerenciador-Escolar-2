@@ -66,13 +66,17 @@
             try {
                 if (Object.keys(firebaseConfig).length > 0) {
                     app = initializeApp(firebaseConfig);
-                    db = getFirestore(app);
-                    auth = getAuth(app);
+                    
+                    // 🚨 CORREÇÃO FINAL: Inicializa Auth antes de Firestore 
+                    auth = getAuth(app); 
+                    db = getFirestore(app); 
+                    
                     console.log("Firebase inicializado.");
                     if (initialAuthToken) {
                         await signInWithCustomToken(auth, initialAuthToken);
                         console.log("Logado com token personalizado.");
                     } else {
+                        // Faz login anônimo (usa o 'auth' inicializado acima)
                         await signInAnonymously(auth);
                         console.log("Logado anonimamente.");
                     }
@@ -1149,19 +1153,12 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${attendanceRecords.map(record => `
-                                    <tr class="border-b border-gray-200 last:border-0">
-                                        <td class="py-2 px-4">${record.data}</td>
-                                        <td class="py-2 px-4">${subjectsData.find(s => s.id === record.materiaId)?.nome || 'N/A'}</td>
-                                        <td class="py-2 px-4">${record.assunto || 'N/A'}</td>
-                                        ${students.map(student => {
-                                            const status = record.presencas.find(p => p.studentId === student.id)?.status;
-                                            const color = status === 'presente' ? 'bg-green-200' : 'bg-red-200';
-                                            const text = status === 'presente' ? 'P' : 'F';
-                                            return `<td class="py-2 px-4 text-center ${color} rounded-full m-1">${text}</td>`;
-                                        }).join('')}
-                                    </tr>
-                                `).join('')}
+                                ${attendanceRecords.map(record => {
+                                    const status = record.presencas.find(p => p.studentId === student.id)?.status;
+                                    const color = status === 'presente' ? 'bg-green-200' : 'bg-red-200';
+                                    const text = status === 'presente' ? 'P' : 'F';
+                                    return `<td class="py-2 px-4 text-center ${color} rounded-full m-1">${text}</td>`;
+                                }).join('')}
                             </tbody>
                         </table>
                     </div>
