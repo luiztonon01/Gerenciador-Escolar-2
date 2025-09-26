@@ -3,135 +3,163 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Gerenciamento Escolar</title>
+    <title>Sistema de Gerenciamento Escolar - Local</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Variáveis globais para Firebase
-        // 🚨 CONFIGURAÇÃO DO FIREBASE ATUALIZADA 🚨
-        
-        // O App ID do seu projeto, usado também para o caminho no Firestore (artifacts/${appId}/public/...)
-        const appId = '1:698218834721:web:cc22b4e5a9d2c9bd31ac60';
-        
-        // O objeto principal de configuração do Firebase
-        const firebaseConfig = {
-          apiKey: "AIzaSyDVw-ybzObQDYfUnolDht19DjMlos1HPRw",
-          authDomain: "gerenciador-8f4e9.firebaseapp.com",
-          projectId: "gerenciador-8f4e9",
-          storageBucket: "gerenciador-8f4e9.firebasestorage.app",
-          messagingSenderId: "698218834721",
-          appId: appId, // Usa a variável 'appId' definida acima
-          measurementId: "G-5XR16448ED"
-        };
-        
-        // Use 'null' se não estiver usando o Firebase Custom Tokens
-        const initialAuthToken = null; 
-        
-        // Fim da área de configuração
-
-        let app, db, auth, userId;
+        // Variáveis globais
         let subjectsData = [];
         let classesData = [];
+        let studentsData = []; // Armazenará os alunos localmente
+        let attendanceRecords = []; // Armazenará o diário localmente
+        // ATIVIDADE REMOVIDA: let activityGradesData = []; 
 
         const mainContainer = document.getElementById('main-container');
+        const localStorageKey = 'schoolManagementData';
 
-        // Dados de exemplo
-        const studentData = [
-            { nome: 'Ana Silva', turmaId: 'turma-manha-1', idade: 16, responsaveis: 'Maria e José Silva', contato: '11987654321', endereco: 'Rua das Flores, 10', turma: 'Turma A', historico: 'Ótimo', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Ana', documentosPdf: null, historicoPdf: null },
-            { nome: 'João Santos', turmaId: 'turma-manha-1', idade: 15, responsaveis: 'Carla e Pedro Santos', contato: '11987654322', endereco: 'Av. Paulista, 100', turma: 'Turma A', historico: 'Bom', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Joao', documentosPdf: null, historicoPdf: null },
-            { nome: 'Sofia Souza', turmaId: 'turma-tarde-1', idade: 14, responsaveis: 'Fernanda Souza', contato: '11987654323', endereco: 'Rua do Limoeiro, 5', turma: 'Turma C', historico: 'Regular', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Sofia', documentosPdf: null, historicoPdf: null },
-            { nome: 'Marcos Oliveira', turmaId: 'turma-noite-1', idade: 17, responsaveis: 'Lucia e Carlos Oliveira', contato: '11987654324', endereco: 'Rua da Amizade, 25', turma: 'Turma E', historico: 'Excelente', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Marcos', documentosPdf: null, historicoPdf: null },
-            { nome: 'Isabela Costa', turmaId: 'turma-noite-1', idade: 18, responsaveis: 'Julia Costa', contato: '11987654325', endereco: 'Travessa da Saudade, 7', turma: 'Turma E', historico: 'Bom', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Isabela', documentosPdf: null, historicoPdf: null }
+        // Dados de exemplo iniciais
+        const initialClasses = [
+            { id: 'turma-manha-1', nome: 'Turma A', turno: 'Manhã' },
+            { id: 'turma-manha-2', nome: 'Turma B', turno: 'Manhã' },
+            { id: 'turma-tarde-1', nome: 'Turma C', turno: 'Tarde' },
+            { id: 'turma-tarde-2', nome: 'Turma D', turno: 'Tarde' },
+            { id: 'turma-noite-1', nome: 'Turma E', turno: 'Noite' },
+            { id: 'turma-noite-2', nome: 'Turma F', turno: 'Noite' },
         ];
 
-        const gradesData = [
-            { studentId: '', materia: 'Matemática', bimestre1: 18, bimestre2: 12, bimestre3: 17, bimestre4: 19 },
-            { studentId: '', materia: 'Português', bimestre1: 15, bimestre2: 16, bimestre3: 14, bimestre4: 18 },
-            { studentId: '', materia: 'História', bimestre1: 10, bimestre2: 11, bimestre3: 9, bimestre4: 12 }
+        const initialStudentData = [
+            { id: 'aluno-1', nome: 'Ana Silva', turmaId: 'turma-manha-1', idade: 16, responsaveis: 'Maria e José Silva', contato: '11987654321', endereco: 'Rua das Flores, 10', turma: 'Turma A', historico: 'Ótimo', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Ana', documentosPdf: null, historicoPdf: null, grades: [
+                { studentId: 'aluno-1', materia: 'Matemática', bimestre1: 18, bimestre2: 12, bimestre3: 17, bimestre4: 19 },
+                { studentId: 'aluno-1', materia: 'Português', bimestre1: 15, bimestre2: 16, bimestre3: 14, bimestre4: 18 },
+                { studentId: 'aluno-1', materia: 'História', bimestre1: 10, bimestre2: 11, bimestre3: 9, bimestre4: 12 }
+            ]},
+            { id: 'aluno-2', nome: 'João Santos', turmaId: 'turma-manha-1', idade: 15, responsaveis: 'Carla e Pedro Santos', contato: '11987654322', endereco: 'Av. Paulista, 100', turma: 'Turma A', historico: 'Bom', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Joao', documentosPdf: null, historicoPdf: null, grades: [] },
+            { id: 'aluno-3', nome: 'Sofia Souza', turmaId: 'turma-tarde-1', idade: 14, responsaveis: 'Fernanda Souza', contato: '11987654323', endereco: 'Rua do Limoeiro, 5', turma: 'Turma C', historico: 'Regular', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Sofia', documentosPdf: null, historicoPdf: null, grades: [] },
+            { id: 'aluno-4', nome: 'Marcos Oliveira', turmaId: 'turma-noite-1', idade: 17, responsaveis: 'Lucia e Carlos Oliveira', contato: '11987654324', endereco: 'Rua da Amizade, 25', turma: 'Turma E', historico: 'Excelente', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Marcos', documentosPdf: null, historicoPdf: null, grades: [] },
+            { id: 'aluno-5', nome: 'Isabela Costa', turmaId: 'turma-noite-1', idade: 18, responsaveis: 'Julia Costa', contato: '11987654325', endereco: 'Travessa da Saudade, 7', turma: 'Turma E', historico: 'Bom', foto: 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Isabela', documentosPdf: null, historicoPdf: null, grades: [] }
         ];
 
         const initialSubjectsData = [
-            { nome: 'Português' },
-            { nome: 'Matemática' },
-            { nome: 'História' },
-            { nome: 'Ciências' },
-            { nome: 'Geografia' },
+            { id: 'sub-1', nome: 'Português' },
+            { id: 'sub-2', nome: 'Matemática' },
+            { id: 'sub-3', nome: 'História' },
+            { id: 'sub-4', nome: 'Ciências' },
+            { id: 'sub-5', nome: 'Geografia' },
         ];
+        
+        // Simulação de funções do Firebase usando localStorage
+        
+        function getUniqueId() {
+            return `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
 
-
-        async function initFirebase() {
-            try {
-                if (Object.keys(firebaseConfig).length > 0) {
-                    app = initializeApp(firebaseConfig);
-                    
-                    // 🚨 CORREÇÃO FINAL: Inicializa Auth antes de Firestore 
-                    auth = getAuth(app); 
-                    db = getFirestore(app); 
-                    
-                    console.log("Firebase inicializado.");
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        console.log("Logado com token personalizado.");
-                    } else {
-                        // Faz login anônimo (usa o 'auth' inicializado acima)
-                        await signInAnonymously(auth);
-                        console.log("Logado anonimamente.");
-                    }
-                    userId = auth.currentUser?.uid || `anon-${crypto.randomUUID()}`;
-                    console.log("ID do usuário:", userId);
-                    await setupDummyData();
-                    onSnapshot(collection(db, `artifacts/${appId}/public/data/classes`), window.renderDashboard);
-                } else {
-                    console.error("Configuração do Firebase ausente.");
-                    mainContainer.innerHTML = `<div class="p-8 text-center text-red-500">Erro: Configuração do Firebase faltando. Por favor, verifique suas credenciais.</div>`;
-                }
-            } catch (e) {
-                console.error("Erro durante a inicialização ou login do Firebase:", e);
-                mainContainer.innerHTML = `<div class="p-8 text-center text-red-500">Erro ao iniciar o Firebase: ${e.message}</div>`;
+        function loadLocalData() {
+            const storedData = localStorage.getItem(localStorageKey);
+            if (storedData) {
+                const data = JSON.parse(storedData);
+                classesData = data.classes || initialClasses;
+                studentsData = data.students || initialStudentData;
+                subjectsData = data.subjects || initialSubjectsData;
+                attendanceRecords = data.attendanceRecords || [];
+                // ATIVIDADE REMOVIDA: data.activityGradesData não é mais carregado
+            } else {
+                classesData = initialClasses;
+                studentsData = initialStudentData;
+                subjectsData = initialSubjectsData;
+                attendanceRecords = [];
+                // ATIVIDADE REMOVIDA: activityGradesData não é inicializado
+                saveLocalData();
             }
         }
 
-        async function setupDummyData() {
-            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
-            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
-            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
+        function saveLocalData() {
+            const data = {
+                classes: classesData,
+                students: studentsData,
+                subjects: subjectsData,
+                attendanceRecords: attendanceRecords,
+                // ATIVIDADE REMOVIDA: activityGradesData não é mais salvo
+            };
+            localStorage.setItem(localStorageKey, JSON.stringify(data));
+        }
 
-            const classSnap = await getDocs(classesCol);
-            if (classSnap.empty) {
-                console.log("Adicionando dados iniciais.");
-                const classes = [
-                    { id: 'turma-manha-1', nome: 'Turma A', turno: 'Manhã' },
-                    { id: 'turma-manha-2', nome: 'Turma B', turno: 'Manhã' },
-                    { id: 'turma-tarde-1', nome: 'Turma C', turno: 'Tarde' },
-                    { id: 'turma-tarde-2', nome: 'Turma D', turno: 'Tarde' },
-                    { id: 'turma-noite-1', nome: 'Turma E', turno: 'Noite' },
-                    { id: 'turma-noite-2', nome: 'Turma F', turno: 'Noite' },
-                ];
-                for (const cls of classes) {
-                    await setDoc(doc(classesCol, cls.id), cls);
-                }
+        // --- Simulação de Funções CRUD para Turmas ---
+        async function getClasses() { return classesData; }
+        async function addClass(cls) {
+            cls.id = getUniqueId();
+            classesData.push(cls);
+            saveLocalData();
+        }
+        async function deleteClassLocal(classId) {
+            classesData = classesData.filter(cls => cls.id !== classId);
+            studentsData = studentsData.filter(s => s.turmaId !== classId); // Remove students from this class
+            attendanceRecords = attendanceRecords.filter(a => a.turmaId !== classId); // Remove attendance records
+            // ATIVIDADE REMOVIDA: activityGradesData não é mais filtrado
+            saveLocalData();
+        }
 
-                for (const student of studentData) {
-                    const studentRef = await addDoc(studentsCol, student);
-                    const newGrades = gradesData.map(g => ({ ...g, studentId: studentRef.id }));
-                    await updateDoc(studentRef, { grades: newGrades });
+        // --- Simulação de Funções CRUD para Alunos ---
+        async function getStudents(classId = null) {
+            if (classId) {
+                return studentsData.filter(s => s.turmaId === classId);
+            }
+            return studentsData;
+        }
+        async function getStudent(studentId) {
+            return studentsData.find(s => s.id === studentId);
+        }
+        async function addOrUpdateStudent(student, isNew) {
+            if (isNew) {
+                student.id = getUniqueId();
+                studentsData.push(student);
+            } else {
+                const index = studentsData.findIndex(s => s.id === student.id);
+                if (index !== -1) {
+                    studentsData[index] = { ...studentsData[index], ...student };
                 }
-
-                for (const subject of initialSubjectsData) {
-                    await addDoc(subjectsCol, subject);
-                }
+            }
+            saveLocalData();
+        }
+        async function deleteStudentLocal(studentId) {
+            studentsData = studentsData.filter(s => s.id !== studentId);
+            // Também remove notas e presenças associadas
+            attendanceRecords.forEach(rec => {
+                rec.presencas = rec.presencas.filter(p => p.studentId !== studentId);
+            });
+            // ATIVIDADE REMOVIDA: activityGradesData não é mais filtrado/removido
+            saveLocalData();
+        }
+        async function updateStudentGrades(studentId, newGrades) {
+            const student = studentsData.find(s => s.id === studentId);
+            if (student) {
+                student.grades = newGrades;
+                saveLocalData();
             }
         }
 
-        async function fetchStudentCount() {
-            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
-            const snapshot = await getDocs(studentsCol);
-            return snapshot.size;
+        // --- Simulação de Funções CRUD para Matérias ---
+        async function getSubjects() { return subjectsData; }
+        async function addSubject(subject) {
+            subject.id = getUniqueId();
+            subjectsData.push(subject);
+            saveLocalData();
+        }
+        async function deleteSubjectLocal(subjectId) {
+            subjectsData = subjectsData.filter(s => s.id !== subjectId);
+            saveLocalData();
         }
 
+        // --- Simulação de Funções para Diário e Atividades ---
+        async function addDailyEntry(entry) {
+            entry.id = getUniqueId();
+            attendanceRecords.push(entry);
+            saveLocalData();
+        }
+        // ATIVIDADE REMOVIDA: Funções addActivityGrade e getActivityGrades removidas
+        async function getAttendanceRecords(classId) {
+            return attendanceRecords.filter(a => a.turmaId === classId);
+        }
+
+        // Funções Auxiliares
         function calculateFinalStatus(grades) {
             const totalScore = grades.reduce((sum, g) => {
                 const bimestreScore = (g.bimestre1 || 0) + (g.bimestre2 || 0) + (g.bimestre3 || 0) + (g.bimestre4 || 0);
@@ -140,12 +168,24 @@
             return totalScore >= 60 ? 'Aprovado' : 'Reprovado';
         }
 
+        function getClassNameById(classId) {
+            const cls = classesData.find(c => c.id === classId);
+            return cls ? cls.nome : 'Turma Desconhecida';
+        }
+
+        function getSubjectNameById(subjectId) {
+            const subj = subjectsData.find(s => s.id === subjectId);
+            return subj ? subj.nome : 'N/A';
+        }
+
+
+        // ----------------------------------------
+        // Funções de Renderização
+        // ----------------------------------------
+
         window.renderDashboard = async function() {
-            const studentCount = await fetchStudentCount();
-            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
-            const classesSnapshot = await getDocs(classesCol);
-            const classes = classesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            classesData = classes; // Armazena os dados das turmas globalmente
+            const classes = await getClasses();
+            const studentCount = (await getStudents()).length;
 
             const classesByShift = {
                 Manhã: classes.filter(cls => cls.turno === 'Manhã'),
@@ -155,7 +195,7 @@
 
             mainContainer.innerHTML = `
                 <div class="p-6">
-                    <h1 class="text-4xl font-bold text-gray-800 mb-6 text-center">Dashboard Escolar</h1>
+                    <h1 class="text-4xl font-bold text-gray-800 mb-6 text-center">Dashboard Escolar (Local)</h1>
                     <div class="bg-indigo-600 rounded-xl p-6 mb-8 text-white shadow-lg text-center">
                         <h2 class="text-2xl font-semibold">Total de Alunos Cadastrados</h2>
                         <p class="text-5xl font-extrabold mt-2">${studentCount}</p>
@@ -184,15 +224,16 @@
                             </div>
                         `).join('')}
                     </div>
+
+                    <div class="mt-8 text-center text-gray-500 text-sm">
+                        <p>Programa desenvolvido por: Luiz Tonon</p>
+                    </div>
                 </div>
             `;
         }
 
         window.showStudents = async function (classId, className) {
-            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
-            const q = query(studentsCol, where("turmaId", "==", classId));
-            const studentsSnapshot = await getDocs(q);
-            const students = studentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const students = await getStudents(classId);
 
             mainContainer.innerHTML = `
                 <div class="p-6">
@@ -216,33 +257,30 @@
         };
 
         window.showStudentProfile = async function (studentId) {
-            const studentDocRef = doc(db, `artifacts/${appId}/public/data/students`, studentId);
-            const studentSnap = await getDoc(studentDocRef);
-            const student = studentSnap.data();
+            const student = await getStudent(studentId);
+            if (!student) {
+                 mainContainer.innerHTML = `<div class="p-8 text-center text-red-500">Aluno não encontrado.</div>`;
+                 return;
+            }
 
             const grades = student.grades || [];
+            const allSubjects = await getSubjects();
 
             // Fetch daily attendance records for the student
-            const attendanceCol = collection(db, `artifacts/${appId}/public/data/diario_aulas`);
-            const qAttendance = query(attendanceCol, where("turmaId", "==", student.turmaId));
-            const attendanceSnap = await getDocs(qAttendance);
-            const attendanceRecords = attendanceSnap.docs
-                .map(doc => doc.data())
+            const allAttendance = await getAttendanceRecords(student.turmaId);
+            const attendanceRecordsStudent = allAttendance
                 .filter(rec => rec.presencas.some(p => p.studentId === studentId))
                 .sort((a, b) => new Date(b.data) - new Date(a.data));
 
-            // Fetch activity grades for the student
-            const activitiesCol = collection(db, `artifacts/${appId}/public/data/atividades`);
-            const qActivities = query(activitiesCol, where("turmaId", "==", student.turmaId));
-            const activitiesSnap = await getDocs(qActivities);
-            const activityGrades = activitiesSnap.docs
-                .map(doc => ({ ...doc.data(), id: doc.id }))
-                .filter(act => act.notas.some(n => n.studentId === studentId));
+            // ATIVIDADE REMOVIDA: Fetch activity grades for the student
+            // const allActivityGrades = await getActivityGrades(student.turmaId);
+            // const activityGradesStudent = allActivityGrades
+            //     .filter(act => act.notas.some(n => n.studentId === studentId));
 
 
             mainContainer.innerHTML = `
                 <div class="p-6">
-                    <button onclick="window.showStudents('${student.turmaId}', '${student.turma || ''}')" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                    <button onclick="window.showStudents('${student.turmaId}', '${getClassNameById(student.turmaId)}')" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
                           <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
                         </svg>
@@ -263,15 +301,15 @@
                                 <h3 class="text-xl font-semibold text-gray-700 mb-3">Informações Pessoais</h3>
                                 <div class="space-y-2 text-gray-600">
                                     <p><span class="font-bold">Idade:</span> ${student.idade} anos</p>
-                                    <p><span class="font-bold">Turma:</span> ${student.turma}</p>
+                                    <p><span class="font-bold">Turma:</span> ${getClassNameById(student.turmaId)}</p>
                                     <p><span class="font-bold">Responsáveis:</span> ${student.responsaveis}</p>
                                     <p><span class="font-bold">Contato:</span> ${student.contato}</p>
                                     <p><span class="font-bold">Endereço:</span> ${student.endereco}</p>
                                     <p><span class="font-bold">Documentos:</span>
-                                        ${student.documentosPdf ? `<a href="data:application/pdf;base64,${btoa(String.fromCharCode(...new Uint8Array(student.documentosPdf.data)))}" download="${student.nome}_documentos.pdf" class="text-blue-500 hover:underline">Baixar PDF</a>` : `Nenhum documento adicionado.`}
+                                        ${student.documentosPdf ? `<a href="#" class="text-blue-500 hover:underline">Baixar PDF</a>` : `Nenhum documento adicionado.`}
                                     </p>
                                     <p><span class="font-bold">Histórico Escolar:</span>
-                                        ${student.historicoPdf ? `<a href="data:application/pdf;base64,${btoa(String.fromCharCode(...new Uint8Array(student.historicoPdf.data)))}" download="${student.nome}_historico.pdf" class="text-blue-500 hover:underline">Baixar PDF</a>` : `Nenhum histórico adicionado.`}
+                                        ${student.historicoPdf ? `<a href="#" class="text-blue-500 hover:underline">Baixar PDF</a>` : `Nenhum histórico adicionado.`}
                                     </p>
                                 </div>
                             </div>
@@ -314,7 +352,7 @@
                         </div>
 
                         <h3 class="text-xl font-semibold text-gray-700 mt-8 mb-4">Histórico de Aulas e Presenças</h3>
-                        ${attendanceRecords.length > 0 ? `
+                        ${attendanceRecordsStudent.length > 0 ? `
                         <div class="overflow-x-auto">
                         <table class="min-w-full bg-white rounded-lg shadow-md">
                             <thead class="bg-gray-200">
@@ -326,13 +364,13 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${attendanceRecords.map(record => {
+                                ${attendanceRecordsStudent.map(record => {
                                     const attendance = record.presencas.find(p => p.studentId === studentId);
                                     return `
                                     <tr class="border-b border-gray-200 last:border-0">
                                         <td class="py-2 px-4 text-gray-700">${record.data}</td>
                                         <td class="py-2 px-4 text-gray-700">${record.assunto || 'N/A'}</td>
-                                        <td class="py-2 px-4 text-gray-700">${subjectsData.find(s => s.id === record.materiaId)?.nome || 'N/A'}</td>
+                                        <td class="py-2 px-4 text-gray-700">${getSubjectNameById(record.materiaId)}</td>
                                         <td class="py-2 px-4 font-bold ${attendance.status === 'presente' ? 'text-green-600' : 'text-red-600'}">${attendance.status === 'presente' ? 'Presente' : 'Ausente'}</td>
                                     </tr>
                                     `;
@@ -341,42 +379,14 @@
                         </table>
                         </div>
                         ` : `<p class="text-center text-gray-500">Nenhum registro de presença para este aluno.</p>`}
-
-                        <h3 class="text-xl font-semibold text-gray-700 mt-8 mb-4">Notas de Atividades</h3>
-                        ${activityGrades.length > 0 ? `
-                        <div class="overflow-x-auto">
-                        <table class="min-w-full bg-white rounded-lg shadow-md">
-                            <thead class="bg-gray-200">
-                                <tr>
-                                    <th class="py-2 px-4 text-left font-semibold text-gray-600">Atividade</th>
-                                    <th class="py-2 px-4 text-center font-semibold text-gray-600">Peso</th>
-                                    <th class="py-2 px-4 text-center font-semibold text-gray-600">Nota</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${activityGrades.map(activity => {
-                                    const grade = activity.notas.find(n => n.studentId === studentId);
-                                    return `
-                                    <tr class="border-b border-gray-200 last:border-0">
-                                        <td class="py-2 px-4 text-gray-700">${activity.nomeAtividade}</td>
-                                        <td class="py-2 px-4 text-center text-gray-700">${activity.peso}</td>
-                                        <td class="py-2 px-4 text-center font-bold ${grade.nota >= 70 ? 'text-green-600' : 'text-red-600'}">${grade.nota}</td>
-                                    </tr>
-                                    `;
-                                }).join('')}
-                            </tbody>
-                        </table>
+                        
                         </div>
-                        ` : `<p class="text-center text-gray-500">Nenhuma nota de atividade para este aluno.</p>`}
-                    </div>
                 </div>
             `;
         };
 
         window.renderManagementDashboard = async function() {
-             const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
-             const classesSnap = await getDocs(classesCol);
-             const classes = classesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const classes = await getClasses();
 
             mainContainer.innerHTML = `
                 <div class="p-6">
@@ -411,9 +421,7 @@
 
         // --- Gerenciamento de Turmas ---
         window.renderClassManagement = async function() {
-            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
-            const classesSnap = await getDocs(classesCol);
-            const classes = classesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const classes = await getClasses();
 
             mainContainer.innerHTML = `
                 <div class="p-6">
@@ -441,7 +449,7 @@
                                 <li class="bg-white p-4 rounded-lg shadow-sm flex justify-between items-center">
                                     <span>${cls.nome} - ${cls.turno}</span>
                                     <div class="space-x-2">
-                                        <button onclick="window.deleteClass('${cls.id}')" class="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">Excluir</button>
+                                        <button onclick="window.deleteClassLocalAndRender('${cls.id}')" class="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">Excluir</button>
                                     </div>
                                 </li>
                             `).join('')}
@@ -454,30 +462,20 @@
                 const name = document.getElementById('className').value;
                 const shift = document.getElementById('classShift').value;
                 if (name) {
-                    await addDoc(classesCol, { nome: name, turno: shift });
+                    await addClass({ nome: name, turno: shift });
                     window.renderClassManagement();
                 }
             });
         }
 
-        window.deleteClass = async function(classId) {
-            console.log("Excluindo turma com ID:", classId);
-            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
-            await deleteDoc(doc(classesCol, classId));
-            // Delete students associated with the class
-            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
-            const q = query(studentsCol, where("turmaId", "==", classId));
-            const studentsSnap = await getDocs(q);
-            const deletePromises = studentsSnap.docs.map(d => deleteDoc(doc(studentsCol, d.id)));
-            await Promise.all(deletePromises);
+        window.deleteClassLocalAndRender = async function(classId) {
+            await deleteClassLocal(classId);
             window.renderClassManagement();
         }
 
         // --- Gerenciamento de Alunos ---
         window.renderStudentManagement = async function() {
-            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
-            const studentsSnap = await getDocs(studentsCol);
-            const students = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const students = await getStudents();
 
             mainContainer.innerHTML = `
                 <div class="p-6">
@@ -498,7 +496,7 @@
                                     <span>${student.nome}</span>
                                     <div class="space-x-2">
                                         <button onclick="window.renderEditStudentForm('${student.id}')" class="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">Editar</button>
-                                        <button onclick="window.deleteStudent('${student.id}')" class="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">Excluir</button>
+                                        <button onclick="window.deleteStudentLocalAndRender('${student.id}')" class="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">Excluir</button>
                                     </div>
                                 </li>
                             `).join('')}
@@ -506,28 +504,30 @@
                     </div>
                 </div>
             `;
+            // Re-render the class select options
+            const classSelect = document.getElementById('studentClass');
+            if (classSelect) {
+                const classes = await getClasses();
+                classSelect.innerHTML = `<option value="">Selecione a Turma</option>` + classes.map(cls => `<option value="${cls.id}">${cls.nome} (${cls.turno})</option>`).join('');
+            }
             document.getElementById('addStudentForm').addEventListener('submit', handleStudentFormSubmit);
         }
 
         window.renderStudentForm = function(student = {}) {
             const isEditing = student.id;
-            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
-            onSnapshot(classesCol, (snapshot) => {
-                classesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                const classSelect = document.getElementById('studentClass');
-                if (classSelect) {
-                    classSelect.innerHTML = `<option value="">Selecione a Turma</option>` + classesData.map(cls => `<option value="${cls.id}" ${student.turmaId === cls.id ? 'selected' : ''}>${cls.nome} (${cls.turno})</option>`).join('');
-                }
-            });
+            const classes = classesData; // Use the globally loaded data
+
+            // Render the select options immediately
+            const classOptions = `<option value="">Selecione a Turma</option>` + classes.map(cls => `<option value="${cls.id}" ${student.turmaId === cls.id ? 'selected' : ''}>${cls.nome} (${cls.turno})</option>`).join('');
 
             return `
                 <form id="${isEditing ? 'editStudentForm' : 'addStudentForm'}" class="mb-6 space-y-4">
                     <input type="hidden" id="studentId" value="${student.id || ''}">
                     ${isEditing ? `<img id="previewPhoto" src="${student.foto || 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Foto'}" class="w-24 h-24 rounded-full mx-auto object-cover mb-4">` : ''}
-                    <input type="text" id="studentName" placeholder="Nome Completo" value="${student.nome || ''}" class="w-full p-2 border border-gray-300 rounded-md">
-                    <input type="number" id="studentAge" placeholder="Idade" value="${student.idade || ''}" class="w-full p-2 border border-gray-300 rounded-md">
-                    <select id="studentClass" class="w-full p-2 border border-gray-300 rounded-md">
-                        <option value="">Selecione a Turma</option>
+                    <input type="text" id="studentName" placeholder="Nome Completo" value="${student.nome || ''}" class="w-full p-2 border border-gray-300 rounded-md" required>
+                    <input type="number" id="studentAge" placeholder="Idade" value="${student.idade || ''}" class="w-full p-2 border border-gray-300 rounded-md" required>
+                    <select id="studentClass" class="w-full p-2 border border-gray-300 rounded-md" required>
+                        ${classOptions}
                     </select>
                     <input type="text" id="studentResponsible" placeholder="Nome dos Responsáveis" value="${student.responsaveis || ''}" class="w-full p-2 border border-gray-300 rounded-md">
                     <input type="text" id="studentContact" placeholder="Contato" value="${student.contato || ''}" class="w-full p-2 border border-gray-300 rounded-md">
@@ -536,13 +536,13 @@
                     <label class="block text-gray-700 font-medium">Foto de Perfil</label>
                     <input type="file" id="studentPhoto" accept="image/png, image/jpeg" class="w-full p-2 border border-gray-300 rounded-md">
 
-                    <label class="block text-gray-700 font-medium">Documentos (PDF)</label>
+                    <label class="block text-gray-700 font-medium">Documentos (PDF) - (Apenas Simulação Local)</label>
                     <input type="file" id="studentDocumentsPdf" accept="application/pdf" class="w-full p-2 border border-gray-300 rounded-md">
-                    ${student.documentosPdf ? `<a href="data:application/pdf;base64,${btoa(String.fromCharCode(...new Uint8Array(student.documentosPdf.data)))}" download="${student.nome}_documentos.pdf" class="text-blue-500 hover:underline mt-2">Ver PDF atual</a>` : ''}
+                    ${student.documentosPdf ? `<span class="text-blue-500 hover:underline mt-2">Documento atual (Não pode ser baixado em modo local)</span>` : ''}
 
-                    <label class="block text-gray-700 font-medium">Histórico Escolar (PDF)</label>
+                    <label class="block text-gray-700 font-medium">Histórico Escolar (PDF) - (Apenas Simulação Local)</label>
                     <input type="file" id="studentHistoryPdf" accept="application/pdf" class="w-full p-2 border border-gray-300 rounded-md">
-                    ${student.historicoPdf ? `<a href="data:application/pdf;base64,${btoa(String.fromCharCode(...new Uint8Array(student.historicoPdf.data)))}" download="${student.nome}_historico.pdf" class="text-blue-500 hover:underline mt-2">Baixar PDF</a>` : ''}
+                    ${student.historicoPdf ? `<span class="text-blue-500 hover:underline mt-2">Histórico atual (Não pode ser baixado em modo local)</span>` : ''}
 
                     <button type="submit" class="bg-green-500 text-white p-2 rounded-md hover:bg-green-600">${isEditing ? 'Salvar Alterações' : 'Adicionar Aluno'}</button>
                     <div id="statusMessage" class="mt-4 text-center"></div>
@@ -557,58 +557,43 @@
             statusMessage.textContent = 'Salvando...';
 
             let studentId = form.querySelector('#studentId').value;
-            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
-            let studentRef;
-
-            if (!studentId) {
-                studentRef = doc(studentsCol);
-                studentId = studentRef.id;
-            } else {
-                studentRef = doc(studentsCol, studentId);
-            }
+            const isNew = !studentId;
 
             const photoFile = form.querySelector('#studentPhoto').files[0];
             const docsFile = form.querySelector('#studentDocumentsPdf').files[0];
             const histFile = form.querySelector('#studentHistoryPdf').files[0];
+            const turmaId = form.querySelector('#studentClass').value;
 
             let studentData = {
+                id: studentId,
                 nome: form.querySelector('#studentName').value,
                 idade: parseInt(form.querySelector('#studentAge').value),
-                turmaId: form.querySelector('#studentClass').value,
-                turma: classesData.find(c => c.id === form.querySelector('#studentClass').value)?.nome || '',
+                turmaId: turmaId,
+                turma: getClassNameById(turmaId),
                 responsaveis: form.querySelector('#studentResponsible').value,
                 contato: form.querySelector('#studentContact').value,
                 endereco: form.querySelector('#studentAddress').value,
+                // Mantém as notas ao atualizar, ou inicia vazias se for novo
+                grades: isNew ? [] : (await getStudent(studentId))?.grades || [],
+                documentosPdf: (await getStudent(studentId))?.documentosPdf || null,
+                historicoPdf: (await getStudent(studentId))?.historicoPdf || null,
             };
 
-            const readFile = (file) => {
-                if (!file) return Promise.resolve(null);
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = reject;
-                    reader.readAsArrayBuffer(file);
-                });
-            };
-
+            // Simulação de leitura de arquivos (apenas para armazenar o URL da imagem, PDFs serão apenas placeholders)
             studentData.foto = form.querySelector('#previewPhoto')?.src || 'https://placehold.co/100x100/AEC6CF/FFFFFF?text=Foto';
-            if (docsFile) studentData.documentosPdf = Array.from(new Uint8Array(await readFile(docsFile)));
-            if (histFile) studentData.historicoPdf = Array.from(new Uint8Array(await readFile(histFile)));
+            
+            if (docsFile) studentData.documentosPdf = { data: 'Simulação PDF' };
+            if (histFile) studentData.historicoPdf = { data: 'Simulação PDF' };
 
             if (photoFile) {
-                studentData.foto = await new Promise((resolve, reject) => {
+                studentData.foto = await new Promise((resolve) => {
                     const reader = new FileReader();
                     reader.onload = () => resolve(reader.result);
-                    reader.onerror = reject;
                     reader.readAsDataURL(photoFile);
                 });
             }
 
-            if (form.querySelector('#studentId').value) {
-                await updateDoc(studentRef, studentData);
-            } else {
-                await setDoc(studentRef, { ...studentData, grades: [] });
-            }
+            await addOrUpdateStudent(studentData, isNew);
 
             statusMessage.textContent = 'Salvo com sucesso!';
             setTimeout(() => {
@@ -617,9 +602,8 @@
         }
 
         window.renderEditStudentForm = async function(studentId) {
-            const studentDoc = doc(db, `artifacts/${appId}/public/data/students`, studentId);
-            const studentSnap = await getDoc(studentDoc);
-            const student = { id: studentSnap.id, ...studentSnap.data() };
+            const student = await getStudent(studentId);
+            if (!student) return;
 
             mainContainer.innerHTML = `
                 <div class="p-6">
@@ -647,70 +631,14 @@
             });
         }
 
-        window.deleteStudent = async function(studentId) {
-            console.log("Excluindo aluno com ID:", studentId);
-            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
-            await deleteDoc(doc(studentsCol, studentId));
+        window.deleteStudentLocalAndRender = async function(studentId) {
+            await deleteStudentLocal(studentId);
             window.renderStudentManagement();
         }
 
         // --- Gerenciamento de Matérias ---
         window.renderSubjectManagement = async function() {
-            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
-
-            onSnapshot(subjectsCol, (snapshot) => {
-                const subjects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                subjectsData = subjects;
-
-                mainContainer.innerHTML = `
-                    <div class="p-6">
-                        <button onclick="window.renderManagementDashboard()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                              <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
-                            </svg>
-                            Voltar
-                        </button>
-                        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Matérias</h1>
-                        <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
-                            <h2 class="text-2xl font-semibold mb-4">Adicionar Nova Matéria</h2>
-                            <form id="addSubjectForm" class="mb-6 flex gap-2">
-                                <input type="text" id="subjectName" placeholder="Nome da Matéria" class="flex-grow p-2 border border-gray-300 rounded-md">
-                                <button type="submit" class="bg-green-500 text-white p-2 rounded-md hover:bg-green-600">Adicionar</button>
-                            </form>
-                            <h2 class="text-2xl font-semibold mb-4">Lista de Matérias</h2>
-                            <ul class="space-y-2" id="subjectList">
-                                ${subjects.map(subject => `
-                                    <li class="bg-white p-4 rounded-lg shadow-sm flex justify-between items-center">
-                                        <span>${subject.nome}</span>
-                                        <button onclick="window.deleteSubject('${subject.id}')" class="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">Excluir</button>
-                                    </li>
-                                `).join('')}
-                            </ul>
-                        </div>
-                    </div>
-                `;
-                document.getElementById('addSubjectForm').addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const name = document.getElementById('subjectName').value;
-                    if (name) {
-                        await addDoc(subjectsCol, { nome: name });
-                        document.getElementById('subjectName').value = '';
-                    }
-                });
-            });
-        }
-
-        window.deleteSubject = async function(subjectId) {
-            console.log("Excluindo matéria com ID:", subjectId);
-            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
-            await deleteDoc(doc(subjectsCol, subjectId));
-        }
-
-        // --- Gerenciamento de Notas ---
-        window.renderGradeManagement = async function() {
-            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
-            const studentsSnap = await getDocs(studentsCol);
-            const students = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const subjects = await getSubjects();
 
             mainContainer.innerHTML = `
                 <div class="p-6">
@@ -720,7 +648,54 @@
                         </svg>
                         Voltar
                     </button>
-                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Notas dos Alunos</h1>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Matérias</h1>
+                    <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
+                        <h2 class="text-2xl font-semibold mb-4">Adicionar Nova Matéria</h2>
+                        <form id="addSubjectForm" class="mb-6 flex gap-2">
+                            <input type="text" id="subjectName" placeholder="Nome da Matéria" class="flex-grow p-2 border border-gray-300 rounded-md" required>
+                            <button type="submit" class="bg-green-500 text-white p-2 rounded-md hover:bg-green-600">Adicionar</button>
+                        </form>
+                        <h2 class="text-2xl font-semibold mb-4">Lista de Matérias</h2>
+                        <ul class="space-y-2" id="subjectList">
+                            ${subjects.map(subject => `
+                                <li class="bg-white p-4 rounded-lg shadow-sm flex justify-between items-center">
+                                    <span>${subject.nome}</span>
+                                    <button onclick="window.deleteSubjectLocalAndRender('${subject.id}')" class="bg-red-500 text-white p-2 rounded-md hover:bg-red-600">Excluir</button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+            document.getElementById('addSubjectForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const name = document.getElementById('subjectName').value;
+                if (name) {
+                    await addSubject({ nome: name });
+                    document.getElementById('subjectName').value = '';
+                    window.renderSubjectManagement(); // Re-render
+                }
+            });
+        }
+
+        window.deleteSubjectLocalAndRender = async function(subjectId) {
+            await deleteSubjectLocal(subjectId);
+            window.renderSubjectManagement();
+        }
+
+        // --- Gerenciamento de Notas (Bimestrais) ---
+        window.renderGradeManagement = async function() {
+            const students = await getStudents();
+
+            mainContainer.innerHTML = `
+                <div class="p-6">
+                    <button onclick="window.renderManagementDashboard()" class="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Voltar
+                    </button>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Notas Bimestrais dos Alunos</h1>
                     <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
                         <h2 class="text-2xl font-semibold mb-4">Selecione um Aluno</h2>
                         <ul class="space-y-2" id="studentList">
@@ -737,22 +712,15 @@
         };
 
         window.renderEditGradesForm = async function(studentId) {
-            const studentDoc = doc(db, `artifacts/${appId}/public/data/students`, studentId);
-            const studentSnap = await getDoc(studentDoc);
-            const student = { id: studentSnap.id, ...studentSnap.data() };
+            const student = await getStudent(studentId);
+            if (!student) return;
             const grades = student.grades || [];
+            const subjects = await getSubjects();
 
-            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
-            const subjectsSnap = await getDocs(subjectsCol);
-            subjectsData = subjectsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            const gradeInputs = subjectsData.map(subject => {
+            const gradeInputs = subjects.map(subject => {
                 const studentGrade = grades.find(g => g.materia === subject.nome) || {
                     materia: subject.nome,
-                    bimestre1: '',
-                    bimestre2: '',
-                    bimestre3: '',
-                    bimestre4: ''
+                    bimestre1: '', bimestre2: '', bimestre3: '', bimestre4: ''
                 };
                 return `
                     <div class="p-4 border border-gray-200 rounded-lg">
@@ -804,7 +772,7 @@
                 const gradesStatus = document.getElementById('gradesStatus');
                 gradesStatus.textContent = 'Salvando...';
 
-                const newGrades = subjectsData.map(subject => {
+                const newGrades = subjects.map(subject => {
                     const gradeData = {
                         materia: subject.nome,
                         studentId: studentId,
@@ -817,7 +785,7 @@
                 });
 
                 try {
-                    await updateDoc(doc(db, `artifacts/${appId}/public/data/students`, studentId), { grades: newGrades });
+                    await updateStudentGrades(studentId, newGrades);
                     gradesStatus.textContent = 'Notas salvas com sucesso!';
                     gradesStatus.className = "text-green-600 mt-2";
                     setTimeout(() => window.renderGradeManagement(), 1000);
@@ -829,11 +797,9 @@
             });
         };
 
-        // --- Gerenciamento de Diário Escolar ---
+        // --- Gerenciamento de Diário Escolar (Apenas Aulas e Presenças) ---
         window.renderSchoolDiaryManagement = async function() {
-            const classesCol = collection(db, `artifacts/${appId}/public/data/classes`);
-            const classesSnap = await getDocs(classesCol);
-            const classes = classesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const classes = await getClasses();
 
             mainContainer.innerHTML = `
                 <div class="p-6">
@@ -843,7 +809,7 @@
                         </svg>
                         Voltar
                     </button>
-                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Diário Escolar</h1>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Gerenciar Diário Escolar (Aulas e Presenças)</h1>
                     <div class="bg-gray-100 rounded-xl p-6 shadow-lg">
                         <h2 class="text-2xl font-semibold mb-4">Selecionar Turma</h2>
                         <select id="selectClass" class="w-full p-2 border border-gray-300 rounded-md mb-4">
@@ -851,7 +817,7 @@
                             ${classes.map(cls => `<option value="${cls.id}">${cls.nome} (${cls.turno})</option>`).join('')}
                         </select>
                         <div class="flex justify-center gap-4 mb-4" id="diaryButtons" style="display:none;">
-                            <button onclick="window.renderClassDiary(document.getElementById('selectClass').value)" class="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">Lançar Aulas e Notas</button>
+                            <button onclick="window.renderClassDiary(document.getElementById('selectClass').value)" class="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">Lançar Aulas e Presenças</button>
                             <button onclick="window.renderAttendanceReport(document.getElementById('selectClass').value)" class="bg-purple-500 text-white p-2 rounded-md hover:bg-purple-600">Relatório de Presenças</button>
                         </div>
                         <div id="schoolDiaryContent" class="hidden">
@@ -865,7 +831,8 @@
                 const diaryButtons = document.getElementById('diaryButtons');
                 if (classId) {
                     diaryButtons.style.display = 'flex';
-                    window.renderClassDiary(classId);
+                    // Re-render the class diary form on class change
+                    window.renderClassDiary(classId); 
                 } else {
                     diaryButtons.style.display = 'none';
                     document.getElementById('schoolDiaryContent').classList.add('hidden');
@@ -874,20 +841,13 @@
         }
 
         window.renderClassDiary = async function(classId) {
-            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
-            const qStudents = query(studentsCol, where("turmaId", "==", classId));
-            const studentsSnap = await getDocs(qStudents);
-            const students = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
-            const subjectsSnap = await getDocs(subjectsCol);
-            const subjects = subjectsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            subjectsData = subjects;
+            const students = await getStudents(classId);
+            const subjects = await getSubjects();
 
             const schoolDiaryContent = document.getElementById('schoolDiaryContent');
             schoolDiaryContent.classList.remove('hidden');
             schoolDiaryContent.innerHTML = `
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 gap-6">
                     <div class="bg-white p-4 rounded-xl shadow-md">
                         <h3 class="text-xl font-semibold mb-3">Lançar Aulas e Presenças</h3>
                         <form id="dailyEntryForm" class="space-y-4">
@@ -910,46 +870,15 @@
                             <div id="dailyStatus" class="mt-2"></div>
                         </form>
                     </div>
-
-                    <div class="bg-white p-4 rounded-xl shadow-md">
-                        <h3 class="text-xl font-semibold mb-3">Lançar Notas de Atividades</h3>
-                        <form id="activityForm" class="space-y-4">
-                            <input type="text" id="activityName" placeholder="Nome da Atividade (ex: Prova 1)" required class="w-full p-2 border border-gray-300 rounded-md">
-                            <input type="number" id="activityWeight" placeholder="Pontuação" required class="w-full p-2 border border-gray-300 rounded-md">
-                            
-                            <select id="activitySubject" required class="w-full p-2 border border-gray-300 rounded-md">
-                                <option value="">Selecione a Matéria...</option>
-                                ${subjects.map(subject => `<option value="${subject.nome}">${subject.nome}</option>`).join('')}
-                            </select>
-                            <select id="activityTrimester" required class="w-full p-2 border border-gray-300 rounded-md">
-                                <option value="">Selecione o Bimestre...</option>
-                                <option value="bimestre1">Bimestre 1</option>
-                                <option value="bimestre2">Bimestre 2</option>
-                                <option value="bimestre3">Bimestre 3</option>
-                                <option value="bimestre4">Bimestre 4</option>
-                            </select>
-                            
-                            <div id="gradesList" class="space-y-2">
-                                <h4 class="font-medium text-gray-700">Notas:</h4>
-                                ${students.map(student => `
-                                    <div class="flex items-center space-x-2">
-                                        <span class="w-24">${student.nome}:</span>
-                                        <input type="number" name="grade-${student.id}" placeholder="Nota" class="flex-grow p-1 border border-gray-300 rounded-md">
-                                    </div>
-                                `).join('')}
-                            </div>
-                            <button type="submit" class="bg-green-500 text-white p-2 rounded-md hover:bg-green-600">Salvar Notas</button>
-                            <div id="gradesStatus" class="mt-2"></div>
-                        </form>
+                    
                     </div>
-                </div>
             `;
 
             // Event listener for Daily Entry Form
             document.getElementById('dailyEntryForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const dailyStatus = document.getElementById('dailyStatus');
-                const turmaId = document.getElementById('selectClass').value;
+                const turmaId = classId;
                 const dailyDate = document.getElementById('dailyDate').value;
                 const dailySubjectId = document.getElementById('dailySubjectId').value;
                 const dailySubjectTopic = document.getElementById('dailySubjectTopic').value;
@@ -963,92 +892,36 @@
                 }));
 
                 try {
-                    await addDoc(collection(db, `artifacts/${appId}/public/data/diario_aulas`), {
-                        turmaId,
-                        data: dailyDate,
-                        assunto: dailySubjectTopic,
-                        materiaId: dailySubjectId,
-                        presencas: attendance
+                    await addDailyEntry({
+                        turmaId, data: dailyDate, assunto: dailySubjectTopic, materiaId: dailySubjectId, presencas: attendance
                     });
                     dailyStatus.textContent = "Presença e aula salvas com sucesso!";
                     dailyStatus.className = "text-green-600 mt-2";
+                    e.target.reset(); // Limpa o formulário após o sucesso
                 } catch (error) {
                     dailyStatus.textContent = "Erro ao salvar: " + error.message;
                     dailyStatus.className = "text-red-600 mt-2";
                     console.error("Erro ao salvar diário:", error);
                 }
             });
-
-            // Event listener for Activity Form
-            document.getElementById('activityForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const gradesStatus = document.getElementById('gradesStatus');
-                const turmaId = document.getElementById('selectClass').value;
-                const activityName = document.getElementById('activityName').value;
-                const activityWeight = parseInt(document.getElementById('activityWeight').value);
-                const activitySubject = document.getElementById('activitySubject').value;
-                const activityTrimester = document.getElementById('activityTrimester').value;
-
-                gradesStatus.textContent = 'Salvando...';
-
-                const activityData = {
-                    turmaId,
-                    nomeAtividade: activityName,
-                    peso: activityWeight,
-                    materia: activitySubject,
-                    bimestre: activityTrimester,
-                    notas: []
-                };
-
-                for (const student of students) {
-                    const gradeInput = document.getElementById(`grade-${student.id}`);
-                    const newGradeValue = parseInt(gradeInput?.value);
-                    if (isNaN(newGradeValue)) continue;
-
-                    activityData.notas.push({
-                        studentId: student.id,
-                        nota: newGradeValue
-                    });
-                }
-                
-                try {
-                    await addDoc(collection(db, `artifacts/${appId}/public/data/atividades`), activityData);
-                    gradesStatus.textContent = "Notas de atividade salvas com sucesso!";
-                    gradesStatus.className = "text-green-600 mt-2";
-                } catch (error) {
-                    gradesStatus.textContent = "Erro ao salvar: " + error.message;
-                    gradesStatus.className = "text-red-600 mt-2";
-                    console.error("Erro ao salvar notas:", error);
-                }
-            });
+            
+            // ATIVIDADE REMOVIDA: O event listener do activityForm foi removido
         }
 
         window.renderAttendanceReport = async function(classId) {
-            const studentsCol = collection(db, `artifacts/${appId}/public/data/students`);
-            const qStudents = query(studentsCol, where("turmaId", "==", classId));
-            const studentsSnap = await getDocs(qStudents);
-            const students = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            const attendanceCol = collection(db, `artifacts/${appId}/public/data/diario_aulas`);
-            const qAttendance = query(attendanceCol, where("turmaId", "==", classId));
-            const attendanceSnap = await getDocs(qAttendance);
-            const attendanceRecords = attendanceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            const subjectsCol = collection(db, `artifacts/${appId}/public/data/subjects`);
-            const subjectsSnap = await getDocs(subjectsCol);
-            const subjects = subjectsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            subjectsData = subjects;
+            const students = await getStudents(classId);
+            const attendanceRecordsClass = await getAttendanceRecords(classId);
+            const subjects = await getSubjects();
 
             const schoolDiaryContent = document.getElementById('schoolDiaryContent');
             schoolDiaryContent.classList.remove('hidden');
 
-            const classInfo = classesData.find(cls => cls.id === classId);
-            const className = classInfo ? classInfo.nome : 'Turma Desconhecida';
+            const className = getClassNameById(classId);
 
             // Calcular o total de faltas e presenças por aluno
             const studentAttendanceSummary = students.map(student => {
-                const totalPresent = attendanceRecords.filter(rec => rec.presencas.find(p => p.studentId === student.id && p.status === 'presente')).length;
-                const totalAbsent = attendanceRecords.filter(rec => rec.presencas.find(p => p.studentId === student.id && p.status === 'ausente')).length;
+                const totalPresent = attendanceRecordsClass.filter(rec => rec.presencas.find(p => p.studentId === student.id && p.status === 'presente')).length;
+                const totalAbsent = attendanceRecordsClass.filter(rec => rec.presencas.find(p => p.studentId === student.id && p.status === 'ausente')).length;
                 return {
                     ...student,
                     totalPresent,
@@ -1069,7 +942,7 @@
                 });
             });
 
-            attendanceRecords.forEach(rec => {
+            attendanceRecordsClass.forEach(rec => {
                 const subjectId = rec.materiaId;
                 if (subjectSummary[subjectId]) {
                     subjectSummary[subjectId].aulas++;
@@ -1153,12 +1026,19 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${attendanceRecords.map(record => {
-                                    const status = record.presencas.find(p => p.studentId === student.id)?.status;
-                                    const color = status === 'presente' ? 'bg-green-200' : 'bg-red-200';
-                                    const text = status === 'presente' ? 'P' : 'F';
-                                    return `<td class="py-2 px-4 text-center ${color} rounded-full m-1">${text}</td>`;
-                                }).join('')}
+                                ${attendanceRecordsClass.map(record => `
+                                    <tr class="border-b border-gray-200 last:border-0">
+                                        <td class="py-2 px-4">${record.data}</td>
+                                        <td class="py-2 px-4">${getSubjectNameById(record.materiaId)}</td>
+                                        <td class="py-2 px-4">${record.assunto || 'N/A'}</td>
+                                        ${students.map(student => {
+                                            const status = record.presencas.find(p => p.studentId === student.id)?.status;
+                                            const color = status === 'presente' ? 'bg-green-200' : 'bg-red-200';
+                                            const text = status === 'presente' ? 'P' : 'F';
+                                            return `<td class="py-2 px-4 text-center ${color} rounded-full m-1">${text}</td>`;
+                                        }).join('')}
+                                    </tr>
+                                `).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -1171,7 +1051,8 @@
         }
 
         window.onload = () => {
-            initFirebase();
+            loadLocalData(); // Carrega dados do localStorage
+            window.renderDashboard(); // Inicia o dashboard
         };
     </script>
 </head>
